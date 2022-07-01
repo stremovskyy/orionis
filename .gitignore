@@ -1,0 +1,5 @@
+/var/
+*.pem
+*.key
+*.crt
+.DS_Store
