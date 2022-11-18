@@ -28,3 +28,17 @@ Module:
 ```go
 module github.com/stremovskyy/orionis
 ```
+## What is inside
+
+```text
+orionis/
+  cmd/orionis-auth/              GIN authorization server
+  client/                        OAuth2 client_credentials token provider + HTTP transport
+  ginorion/                      GIN middleware + auth route registration
+  jwk/                           JWKS types, Ed25519 signer, static/remote key providers
+  server/                        OAuth2 token endpoint, JWKS endpoint, client registry
+  examples/gin-billing-service/  Protected GIN resource server example
+  examples/gin-orders-client/    Client service example that calls billing
+  config/orionis.example.json    Local development config
+  docs/architecture.md           Architecture notes
+```
