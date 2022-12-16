@@ -42,3 +42,11 @@ orionis/
   config/orionis.example.json    Local development config
   docs/architecture.md           Architecture notes
 ```
+## Design goals
+
+- Chain-first API that is easy to read in existing services.
+- KISS defaults: Ed25519, 15-minute token TTL, JWKS cache, Bearer JWT.
+- Core packages are framework-agnostic; GIN integration is optional.
+- Local JWT validation in resource services through JWKS.
+- High-throughput client token cache with in-flight request de-duplication.
+- Small interfaces for extension: client registry, signer, key provider, request authenticator, GIN error handler.
