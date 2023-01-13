@@ -50,3 +50,32 @@ orionis/
 - Local JWT validation in resource services through JWKS.
 - High-throughput client token cache with in-flight request de-duplication.
 - Small interfaces for extension: client registry, signer, key provider, request authenticator, GIN error handler.
+## Run locally
+
+Terminal 1: authorization server.
+
+```bash
+cd ~/go/src/github.com/stremovskyy/orionis
+go run ./cmd/orionis-auth -config ./config/orionis.example.json
+```
+
+Terminal 2: protected billing service.
+
+```bash
+cd ~/go/src/github.com/stremovskyy/orionis
+go run ./examples/gin-billing-service
+```
+
+Terminal 3: orders service client.
+
+```bash
+cd ~/go/src/github.com/stremovskyy/orionis
+go run ./examples/gin-orders-client
+```
+
+Expected client output:
+
+```text
+status=201
+{"amount":1500,"called_by":"orders-service","invoice_id":"inv_demo_001","order_id":"ord_demo_001","scope":"billing.invoice.create"}
+```
