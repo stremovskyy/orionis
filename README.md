@@ -79,3 +79,33 @@ Expected client output:
 status=201
 {"amount":1500,"called_by":"orders-service","invoice_id":"inv_demo_001","order_id":"ord_demo_001","scope":"billing.invoice.create"}
 ```
+## Manual token request
+
+```bash
+curl -s \
+  -u 'orders-service:orders-local-secret-change-me' \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'grant_type=client_credentials' \
+  -d 'audience=billing-api' \
+  -d 'scope=billing.invoice.create' \
+  http://localhost:8080/oauth/token | jq
+```
+
+Response:
+
+```json
+{
+  "access_token": "eyJhbGciOiJFZERTQSIsImtpZCI6Im9yaW9uaXMtbG9jYWwtZWQyNTUxOS0x...",
+  "token_type": "Bearer",
+  "expires_in": 900,
+  "scope": "billing.invoice.create"
+}
+```
+
+JWKS:
+
+```bash
+curl -s http://localhost:8080/.well-known/jwks.json | jq
+```
+
+---
