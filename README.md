@@ -109,3 +109,36 @@ curl -s http://localhost:8080/.well-known/jwks.json | jq
 ```
 
 ---
+# Chain API cookbook
+
+## 1. Calling service: add JWT automatically to outgoing HTTP requests
+
+```go
+package orders
+
+import (
+    "net/http"
+
+    "github.com/stremovskyy/orionis/client"
+)
+
+func BillingHTTPClient() (*http.Client, error) {
+    return client.New().
+        TokenURL("http://orionis-auth.internal/oauth/token").
+        As("orders-service", "load-from-secrets-manager").
+        For("billing-api", "billing.invoice.create").
+        BuildHTTPClient(http.DefaultClient)
+}
+```
+
+Usage:
+
+```go
+hc, _ := BillingHTTPClient()
+req, _ := http.NewRequest("POST", "http://billing.internal/invoices", body)
+req.Header.Set("Content-Type", "application/json")
+
+res, err := hc.Do(req) // Authorization: Bearer <token> is added automatically
+```
+
+The provider caches tokens by `audience + scopes`, refreshes before expiration, and shares one token acquisition between concurrent goroutines.
