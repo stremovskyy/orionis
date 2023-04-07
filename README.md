@@ -142,3 +142,22 @@ res, err := hc.Do(req) // Authorization: Bearer <token> is added automatically
 ```
 
 The provider caches tokens by `audience + scopes`, refreshes before expiration, and shares one token acquisition between concurrent goroutines.
+## 2. Calling service: reuse one provider for several targets
+
+```go
+provider, err := client.New().
+    TokenURL("http://orionis-auth.internal/oauth/token").
+    As("orders-service", "load-from-secrets-manager").
+    Build()
+if err != nil {
+    return err
+}
+
+billingHTTP := provider.
+    For("billing-api", "billing.invoice.create").
+    HTTPClient(http.DefaultClient)
+
+dispatchHTTP := provider.
+    For("dispatch-api", "dispatch.order.read").
+    HTTPClient(http.DefaultClient)
+```
