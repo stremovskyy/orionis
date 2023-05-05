@@ -161,3 +161,40 @@ dispatchHTTP := provider.
     For("dispatch-api", "dispatch.order.read").
     HTTPClient(http.DefaultClient)
 ```
+## 3. GIN resource service: protect routes through JWKS
+
+```go
+package billing
+
+import (
+    "net/http"
+
+    "github.com/gin-gonic/gin"
+    "github.com/stremovskyy/orionis/ginorion"
+)
+
+func Router() (*gin.Engine, error) {
+    guard, err := ginorion.New().
+        Issuer("http://orionis-auth.internal").
+        Audience("billing-api").
+        JWKS("http://orionis-auth.internal/.well-known/jwks.json").
+        Build()
+    if err != nil {
+        return nil, err
+    }
+
+    r := gin.Default()
+
+    r.POST("/invoices",
+        guard.Require("billing.invoice.create"),
+        func(c *gin.Context) {
+            claims := ginorion.MustClaims(c)
+            c.JSON(http.StatusCreated, gin.H{
+                "created_by_service": claims.ClientID,
+            })
+        },
+    )
+
+    return r, nil
+}
+```
