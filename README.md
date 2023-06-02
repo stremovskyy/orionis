@@ -198,3 +198,17 @@ func Router() (*gin.Engine, error) {
     return r, nil
 }
 ```
+## 4. GIN resource service: custom verifier
+
+```go
+provider, _ := jwk.Remote("http://orionis-auth.internal/.well-known/jwks.json").Build()
+
+verifier := orionis.NewVerifier().
+    Issuer("http://orionis-auth.internal").
+    Audience("billing-api").
+    Keys(provider)
+
+guard, _ := ginorion.New().
+    Verifier(verifier).
+    Build()
+```
