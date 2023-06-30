@@ -212,3 +212,35 @@ guard, _ := ginorion.New().
     Verifier(verifier).
     Build()
 ```
+## 5. Authorization server inside an existing GIN app
+
+```go
+signer, _ := jwk.Ed25519().
+    Path("/run/secrets/orionis-ed25519.pem").
+    KID("orionis-prod-ed25519-1").
+    Build()
+
+auth, _ := server.New().
+    Issuer("https://auth.internal.example.local").
+    AccessTokenTTL(15 * time.Minute).
+    Signer(signer).
+    Client(server.NewClient("orders-service").
+        Secret("load-from-secrets-manager").
+        Audience("billing-api").
+        Scopes("billing.invoice.create", "billing.invoice.read").
+        Defaults("billing.invoice.read"),
+    ).
+    Build()
+
+r := gin.Default()
+ginorion.Auth(auth).Mount(r)
+```
+
+Registered endpoints:
+
+```text
+POST /oauth/token
+GET  /.well-known/jwks.json
+GET  /.well-known/openid-configuration
+GET  /healthz
+```
