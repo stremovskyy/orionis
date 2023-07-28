@@ -244,3 +244,17 @@ GET  /.well-known/jwks.json
 GET  /.well-known/openid-configuration
 GET  /healthz
 ```
+## 6. Static public key instead of remote JWKS
+
+Useful for tests or very small deployments.
+
+```go
+provider, _ := jwk.Static(signer.PublicJWK()).Build()
+
+verifier := orionis.NewVerifier().
+    Issuer("http://localhost:8080").
+    Audience("billing-api").
+    Keys(provider)
+```
+
+---
