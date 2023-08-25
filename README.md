@@ -258,3 +258,19 @@ verifier := orionis.NewVerifier().
 ```
 
 ---
+# JWT payload example
+
+```json
+{
+  "iss": "http://localhost:8080",
+  "sub": "orders-service",
+  "aud": ["billing-api"],
+  "exp": 1782900900,
+  "nbf": 1782900000,
+  "iat": 1782900000,
+  "jti": "0rYF8M77WyGLUuk0TwvT8A",
+  "client_id": "orders-service",
+  "scope": "billing.invoice.create",
+  "token_use": "access"
+}
+```
