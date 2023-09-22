@@ -274,3 +274,25 @@ verifier := orionis.NewVerifier().
   "token_use": "access"
 }
 ```
+# Configuration example
+
+```json
+{
+  "listen": ":8080",
+  "issuer": "http://localhost:8080",
+  "access_token_ttl": "15m",
+  "key": {
+    "kid": "orionis-local-ed25519-1",
+    "private_key_path": "./var/orionis-ed25519.pem"
+  },
+  "clients": [
+    {
+      "id": "orders-service",
+      "secrets": ["orders-local-secret-change-me"],
+      "allowed_audiences": ["billing-api"],
+      "allowed_scopes": ["billing.invoice.create", "billing.invoice.read"],
+      "default_scopes": ["billing.invoice.read"]
+    }
+  ]
+}
+```
