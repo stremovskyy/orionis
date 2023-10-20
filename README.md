@@ -296,3 +296,24 @@ verifier := orionis.NewVerifier().
   ]
 }
 ```
+# Extension points
+
+## Custom client registry
+
+Implement `server.ClientStore`:
+
+```go
+type ClientStore interface {
+    FindClient(ctx context.Context, id string) (server.Client, error)
+}
+```
+
+Then wire it:
+
+```go
+auth, _ := server.New().
+    Issuer("https://auth.internal").
+    Signer(signer).
+    Store(myPostgresClientStore).
+    Build()
+```
