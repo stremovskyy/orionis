@@ -317,3 +317,17 @@ auth, _ := server.New().
     Store(myPostgresClientStore).
     Build()
 ```
+## Custom signer
+
+Implement `server.Signer`:
+
+```go
+type Signer interface {
+    KeyID() string
+    Algorithm() string
+    Sign(claims *orionis.Claims) (string, error)
+    PublicJWK() jwk.Key
+}
+```
+
+That allows RS256, PS256, ES256, AWS KMS, Vault Transit, or HSM-backed signing without changing clients or resource services.
