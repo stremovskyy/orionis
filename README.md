@@ -331,3 +331,15 @@ type Signer interface {
 ```
 
 That allows RS256, PS256, ES256, AWS KMS, Vault Transit, or HSM-backed signing without changing clients or resource services.
+## Custom GIN error response
+
+```go
+guard, _ := ginorion.New().
+    Issuer(issuer).
+    Audience("billing-api").
+    JWKS(jwksURL).
+    ErrorHandler(func(c *gin.Context, status int, code string, err error) {
+        c.JSON(status, gin.H{"code": code})
+    }).
+    Build()
+```
