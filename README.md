@@ -343,3 +343,12 @@ guard, _ := ginorion.New().
     }).
     Build()
 ```
+## Custom token request authentication
+
+```go
+provider, _ := client.New().
+    TokenURL("https://auth.internal/oauth/token").
+    Authenticator(myPrivateKeyJWTAuthenticator).
+    For("billing-api", "billing.invoice.create").
+    Build()
+```
