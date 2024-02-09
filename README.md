@@ -352,3 +352,12 @@ provider, _ := client.New().
     For("billing-api", "billing.invoice.create").
     Build()
 ```
+# Security notes
+
+- Use short access token TTLs: 5–15 minutes is usually a good service-token range.
+- Store client secrets and private keys outside Git.
+- Prefer one `client_id` per service.
+- Always validate `iss`, `aud`, `exp`, `nbf`, signature, `token_use`, and required scopes.
+- Do not reuse a token minted for `billing-api` against another audience.
+- For production, add rate limiting and audit logs around `/oauth/token`.
+- For stronger service identity, add mTLS or SPIFFE/SPIRE alongside JWT scopes.
