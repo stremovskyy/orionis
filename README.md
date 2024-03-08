@@ -361,3 +361,8 @@ provider, _ := client.New().
 - Do not reuse a token minted for `billing-api` against another audience.
 - For production, add rate limiting and audit logs around `/oauth/token`.
 - For stronger service identity, add mTLS or SPIFFE/SPIRE alongside JWT scopes.
+# Tests
+
+```bash
+go test ./...
+```
