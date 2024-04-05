@@ -366,3 +366,23 @@ provider, _ := client.New().
 ```bash
 go test ./...
 ```
+# Suggested production topology
+
+```text
+orders-service
+  client.Provider
+  client.Transport
+       |
+       | POST /oauth/token, Basic Auth, client_credentials
+       v
+orionis-auth
+  /oauth/token
+  /.well-known/jwks.json
+       |
+       | JWT access token
+       v
+billing-service
+  ginorion.Guard
+  orionis.Verifier
+  jwk.RemoteProvider
+```
