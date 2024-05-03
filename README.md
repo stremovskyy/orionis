@@ -386,3 +386,12 @@ billing-service
   orionis.Verifier
   jwk.RemoteProvider
 ```
+# Package summary
+
+| Package | Purpose |
+|---|---|
+| `orionis` | Claims, verifier, token response, scope helpers |
+| `client` | Chain builder, token provider, cache, HTTP transport |
+| `server` | Chain builder, OAuth token endpoint, JWKS endpoint, client store |
+| `jwk` | Chain builders for JWKS providers and Ed25519 signer |
+| `ginorion` | Chain builder for GIN guards and auth route mounting |
