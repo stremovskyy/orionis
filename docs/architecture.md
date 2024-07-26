@@ -55,3 +55,6 @@ auth, err := server.New().
     ).
     Build()
 ```
+## Why local validation
+
+Resource services do not call the authorization server for every request. They fetch JWKS, cache public keys, and validate JWTs locally. This keeps latency low and prevents the authorization server from becoming a runtime bottleneck.
