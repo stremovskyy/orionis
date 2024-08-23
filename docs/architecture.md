@@ -58,3 +58,6 @@ auth, err := server.New().
 ## Why local validation
 
 Resource services do not call the authorization server for every request. They fetch JWKS, cache public keys, and validate JWTs locally. This keeps latency low and prevents the authorization server from becoming a runtime bottleneck.
+## Why Ed25519 by default
+
+Ed25519 gives compact keys/signatures and fast signing/verification while avoiding large RSA keys. Orionis keeps the signer behind an interface, so RS256, PS256, ES256, KMS-backed signing, or HSM-backed signing can be added without changing resource services.
