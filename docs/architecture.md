@@ -61,3 +61,13 @@ Resource services do not call the authorization server for every request. They f
 ## Why Ed25519 by default
 
 Ed25519 gives compact keys/signatures and fast signing/verification while avoiding large RSA keys. Orionis keeps the signer behind an interface, so RS256, PS256, ES256, KMS-backed signing, or HSM-backed signing can be added without changing resource services.
+## Key rotation model
+
+The server supports multiple signers. Publish all public keys through JWKS and choose one active signer for new tokens. Keep old public keys in JWKS until every token signed by the old key has expired.
+
+```text
+T0: JWKS = [old], active = old
+T1: JWKS = [old, new], active = old
+T2: JWKS = [old, new], active = new
+T3: after max token TTL + clock skew, JWKS = [new], active = new
+```
