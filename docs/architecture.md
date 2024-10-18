@@ -71,3 +71,10 @@ T1: JWKS = [old, new], active = old
 T2: JWKS = [old, new], active = new
 T3: after max token TTL + clock skew, JWKS = [new], active = new
 ```
+## Trust boundary
+
+- Authorization server owns private signing keys.
+- Resource services only have public keys.
+- Calling services only have their own client credentials.
+- Access tokens are audience-bound.
+- Scopes are service permissions, not user permissions.
