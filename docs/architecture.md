@@ -78,3 +78,9 @@ T3: after max token TTL + clock skew, JWKS = [new], active = new
 - Calling services only have their own client credentials.
 - Access tokens are audience-bound.
 - Scopes are service permissions, not user permissions.
+## KISS decisions
+
+- `client_secret_basic` is implemented first; `Authenticator` allows `private_key_jwt` or mTLS-specific auth later.
+- Ed25519 is the built-in signer; `Signer` interface keeps crypto extensible.
+- `MemoryClientStore` is built in; production can replace it with Postgres, DynamoDB, Redis, Vault, or AWS Secrets Manager.
+- GIN middleware is a thin wrapper around `orionis.Verifier`; non-GIN services can use the verifier directly.
