@@ -2,4 +2,5 @@
 *.pem
 *.key
 *.crt
+.idea/
 .DS_Store
