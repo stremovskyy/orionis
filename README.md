@@ -28,6 +28,7 @@ Module:
 ```go
 module github.com/stremovskyy/orionis
 ```
+
 ## What is inside
 
 ```text
@@ -42,6 +43,7 @@ orionis/
   config/orionis.example.json    Local development config
   docs/architecture.md           Architecture notes
 ```
+
 ## Design goals
 
 - Chain-first API that is easy to read in existing services.
@@ -50,6 +52,7 @@ orionis/
 - Local JWT validation in resource services through JWKS.
 - High-throughput client token cache with in-flight request de-duplication.
 - Small interfaces for extension: client registry, signer, key provider, request authenticator, GIN error handler.
+
 ## Run locally
 
 Terminal 1: authorization server.
@@ -79,6 +82,7 @@ Expected client output:
 status=201
 {"amount":1500,"called_by":"orders-service","invoice_id":"inv_demo_001","order_id":"ord_demo_001","scope":"billing.invoice.create"}
 ```
+
 ## Manual token request
 
 ```bash
@@ -109,6 +113,7 @@ curl -s http://localhost:8080/.well-known/jwks.json | jq
 ```
 
 ---
+
 # Chain API cookbook
 
 ## 1. Calling service: add JWT automatically to outgoing HTTP requests
@@ -142,6 +147,7 @@ res, err := hc.Do(req) // Authorization: Bearer <token> is added automatically
 ```
 
 The provider caches tokens by `audience + scopes`, refreshes before expiration, and shares one token acquisition between concurrent goroutines.
+
 ## 2. Calling service: reuse one provider for several targets
 
 ```go
@@ -161,6 +167,7 @@ dispatchHTTP := provider.
     For("dispatch-api", "dispatch.order.read").
     HTTPClient(http.DefaultClient)
 ```
+
 ## 3. GIN resource service: protect routes through JWKS
 
 ```go
@@ -198,6 +205,7 @@ func Router() (*gin.Engine, error) {
     return r, nil
 }
 ```
+
 ## 4. GIN resource service: custom verifier
 
 ```go
@@ -212,6 +220,7 @@ guard, _ := ginorion.New().
     Verifier(verifier).
     Build()
 ```
+
 ## 5. Authorization server inside an existing GIN app
 
 ```go
@@ -244,6 +253,7 @@ GET  /.well-known/jwks.json
 GET  /.well-known/openid-configuration
 GET  /healthz
 ```
+
 ## 6. Static public key instead of remote JWKS
 
 Useful for tests or very small deployments.
@@ -258,6 +268,7 @@ verifier := orionis.NewVerifier().
 ```
 
 ---
+
 # JWT payload example
 
 ```json
@@ -274,6 +285,7 @@ verifier := orionis.NewVerifier().
   "token_use": "access"
 }
 ```
+
 # Configuration example
 
 ```json
@@ -296,6 +308,7 @@ verifier := orionis.NewVerifier().
   ]
 }
 ```
+
 # Extension points
 
 ## Custom client registry
@@ -317,6 +330,7 @@ auth, _ := server.New().
     Store(myPostgresClientStore).
     Build()
 ```
+
 ## Custom signer
 
 Implement `server.Signer`:
@@ -331,6 +345,7 @@ type Signer interface {
 ```
 
 That allows RS256, PS256, ES256, AWS KMS, Vault Transit, or HSM-backed signing without changing clients or resource services.
+
 ## Custom GIN error response
 
 ```go
@@ -343,6 +358,7 @@ guard, _ := ginorion.New().
     }).
     Build()
 ```
+
 ## Custom token request authentication
 
 ```go
@@ -352,6 +368,7 @@ provider, _ := client.New().
     For("billing-api", "billing.invoice.create").
     Build()
 ```
+
 # Security notes
 
 - Use short access token TTLs: 5–15 minutes is usually a good service-token range.
@@ -361,11 +378,13 @@ provider, _ := client.New().
 - Do not reuse a token minted for `billing-api` against another audience.
 - For production, add rate limiting and audit logs around `/oauth/token`.
 - For stronger service identity, add mTLS or SPIFFE/SPIRE alongside JWT scopes.
+
 # Tests
 
 ```bash
 go test ./...
 ```
+
 # Suggested production topology
 
 ```text
@@ -386,6 +405,7 @@ billing-service
   orionis.Verifier
   jwk.RemoteProvider
 ```
+
 # Package summary
 
 | Package | Purpose |

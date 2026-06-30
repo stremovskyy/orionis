@@ -16,6 +16,7 @@ Service B
   -> validates JWT signature via JWKS
   -> validates iss/aud/exp/nbf/token_use/scope
 ```
+
 ## Chain-first integration
 
 The project is optimized around readable integration blocks.
@@ -55,12 +56,15 @@ auth, err := server.New().
     ).
     Build()
 ```
+
 ## Why local validation
 
 Resource services do not call the authorization server for every request. They fetch JWKS, cache public keys, and validate JWTs locally. This keeps latency low and prevents the authorization server from becoming a runtime bottleneck.
+
 ## Why Ed25519 by default
 
 Ed25519 gives compact keys/signatures and fast signing/verification while avoiding large RSA keys. Orionis keeps the signer behind an interface, so RS256, PS256, ES256, KMS-backed signing, or HSM-backed signing can be added without changing resource services.
+
 ## Key rotation model
 
 The server supports multiple signers. Publish all public keys through JWKS and choose one active signer for new tokens. Keep old public keys in JWKS until every token signed by the old key has expired.
@@ -71,6 +75,7 @@ T1: JWKS = [old, new], active = old
 T2: JWKS = [old, new], active = new
 T3: after max token TTL + clock skew, JWKS = [new], active = new
 ```
+
 ## Trust boundary
 
 - Authorization server owns private signing keys.
@@ -78,6 +83,7 @@ T3: after max token TTL + clock skew, JWKS = [new], active = new
 - Calling services only have their own client credentials.
 - Access tokens are audience-bound.
 - Scopes are service permissions, not user permissions.
+
 ## KISS decisions
 
 - `client_secret_basic` is implemented first; `Authenticator` allows `private_key_jwt` or mTLS-specific auth later.
