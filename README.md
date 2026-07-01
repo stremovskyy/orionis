@@ -351,6 +351,103 @@ verifier := orionis.NewVerifier().
 }
 ```
 
+## Production-style service-to-service config
+
+Use this pattern when one internal service needs access to another internal service.
+The caller is the OAuth client. The receiver is the audience. Scopes describe the allowed actions.
+
+Do not put plaintext client secrets in the JSON config for shared or deployed environments.
+Store only `secret_sha256_hex` in Orionis config and keep the plaintext secret in your secret manager or a local, untracked env file.
+
+Create a client secret and hash it:
+
+```bash
+CLIENT_SECRET="$(openssl rand -base64 32)"
+CLIENT_SECRET_SHA="$(printf '%s' "$CLIENT_SECRET" | openssl dgst -sha256 -r | awk '{print $1}')"
+
+mkdir -p ./secrets
+printf 'ORIONIS_CALLER_SERVICE_CLIENT_SECRET=%s\n' "$CLIENT_SECRET" >> ./secrets/client-secrets.env
+chmod 600 ./secrets/client-secrets.env
+```
+
+Add the caller service to the auth server config:
+
+```json
+{
+  "listen": ":8080",
+  "log_level": "info",
+  "issuer": "https://auth.example.internal",
+  "access_token_ttl": "15m",
+  "key": {
+    "kid": "orionis-dev-ed25519-1",
+    "private_key_path": "/app/var/orionis-ed25519.pem"
+  },
+  "clients": [
+    {
+      "id": "caller-service",
+      "secret_sha256_hex": ["<CLIENT_SECRET_SHA>"],
+      "allowed_audiences": ["target-api"],
+      "allowed_scopes": [
+        "target.read",
+        "target.write"
+      ],
+      "default_scopes": ["target.read"]
+    }
+  ]
+}
+```
+
+Request a token from the calling service:
+
+```bash
+set -eu
+. ./secrets/client-secrets.env
+
+curl -fsS \
+  -u "caller-service:${ORIONIS_CALLER_SERVICE_CLIENT_SECRET}" \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'grant_type=client_credentials' \
+  -d 'audience=target-api' \
+  -d 'scope=target.write' \
+  https://auth.example.internal/oauth/token | jq
+```
+
+Configure the receiving service to validate that token:
+
+```bash
+ORIONIS_ISSUER=https://auth.example.internal
+ORIONIS_AUDIENCE=target-api
+ORIONIS_JWKS_URL=https://auth.example.internal/.well-known/jwks.json
+```
+
+Protect a GIN route in the receiving service:
+
+```go
+guard, err := ginorion.New().
+    Issuer(os.Getenv("ORIONIS_ISSUER")).
+    Audience(os.Getenv("ORIONIS_AUDIENCE")).
+    JWKS(os.Getenv("ORIONIS_JWKS_URL")).
+    Build()
+if err != nil {
+    return err
+}
+
+r.POST("/internal/action",
+    guard.Require("target.write"),
+    func(c *gin.Context) {
+        claims := ginorion.MustClaims(c)
+        c.JSON(http.StatusOK, gin.H{"called_by": claims.ClientID})
+    },
+)
+```
+
+Rules of thumb:
+
+- Register a service as a client only when it calls another service.
+- Register the receiving service name as an audience, not as a client, unless it also calls other services.
+- Use narrow scopes for concrete actions instead of broad names like `admin` or `full_access`.
+- Keep example names, domains, hashes, and secrets as placeholders in documentation.
+
 # Extension points
 
 ## Custom client registry

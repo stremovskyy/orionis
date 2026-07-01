@@ -112,12 +112,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := configureRuntimeMode(cfg.LogLevel); err != nil {
+	level, err := configureRuntimeMode(cfg.LogLevel)
+	if err != nil {
 		slog.Error("configure runtime mode", "error", err)
 		os.Exit(1)
 	}
 
-	r := gin.Default()
+	r := newGinEngine(level)
 	ginorion.Auth(auth).Mount(r)
 
 	slog.Info("orionis auth server started", "listen", cfg.Listen, "issuer", cfg.Issuer, "kid", signer.KeyID())
@@ -172,10 +173,10 @@ func parseDurationDefault(value string, fallback time.Duration) (time.Duration, 
 	return d, nil
 }
 
-func configureRuntimeMode(logLevel string) error {
+func configureRuntimeMode(logLevel string) (slog.Level, error) {
 	level, err := parseLogLevel(logLevel)
 	if err != nil {
-		return err
+		return slog.LevelInfo, err
 	}
 
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
@@ -183,12 +184,23 @@ func configureRuntimeMode(logLevel string) error {
 	if level <= slog.LevelDebug {
 		gin.SetMode(gin.DebugMode)
 
-		return nil
+		return level, nil
 	}
 
 	gin.SetMode(gin.ReleaseMode)
 
-	return nil
+	return level, nil
+}
+
+func newGinEngine(level slog.Level) *gin.Engine {
+	if level <= slog.LevelDebug {
+		return gin.Default()
+	}
+
+	r := gin.New()
+	r.Use(gin.Recovery())
+
+	return r
 }
 
 func parseLogLevel(logLevel string) (slog.Level, error) {

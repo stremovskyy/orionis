@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -138,7 +141,7 @@ func TestConfigureRuntimeModeEnablesGinDebugForDebugLevel(t *testing.T) {
 		slog.SetDefault(previousLogger)
 	})
 
-	if err := configureRuntimeMode("debug"); err != nil {
+	if _, err := configureRuntimeMode("debug"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -159,7 +162,7 @@ func TestConfigureRuntimeModeUsesGinReleaseForInfoLevel(t *testing.T) {
 		slog.SetDefault(previousLogger)
 	})
 
-	if err := configureRuntimeMode("info"); err != nil {
+	if _, err := configureRuntimeMode("info"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -173,7 +176,49 @@ func TestConfigureRuntimeModeUsesGinReleaseForInfoLevel(t *testing.T) {
 }
 
 func TestConfigureRuntimeModeRejectsInvalidLogLevel(t *testing.T) {
-	if err := configureRuntimeMode("verbose"); err == nil {
+	if _, err := configureRuntimeMode("verbose"); err == nil {
 		t.Fatalf("expected invalid log level to be rejected")
+	}
+}
+
+func TestNewGinEngineSuppressesRequestLogsForInfoLevel(t *testing.T) {
+	previousMode := gin.Mode()
+	previousWriter := gin.DefaultWriter
+	t.Cleanup(func() {
+		gin.SetMode(previousMode)
+		gin.DefaultWriter = previousWriter
+	})
+
+	gin.SetMode(gin.ReleaseMode)
+	var logs bytes.Buffer
+	gin.DefaultWriter = &logs
+
+	r := newGinEngine(slog.LevelInfo)
+	r.GET("/healthz", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/healthz", nil))
+
+	if strings.Contains(logs.String(), "[GIN]") {
+		t.Fatalf("expected info level to suppress gin request logs, got %q", logs.String())
+	}
+}
+
+func TestNewGinEngineEmitsRequestLogsForDebugLevel(t *testing.T) {
+	previousMode := gin.Mode()
+	previousWriter := gin.DefaultWriter
+	t.Cleanup(func() {
+		gin.SetMode(previousMode)
+		gin.DefaultWriter = previousWriter
+	})
+
+	gin.SetMode(gin.DebugMode)
+	var logs bytes.Buffer
+	gin.DefaultWriter = &logs
+
+	r := newGinEngine(slog.LevelDebug)
+	r.GET("/healthz", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/healthz", nil))
+
+	if !strings.Contains(logs.String(), "[GIN]") {
+		t.Fatalf("expected debug level to emit gin request logs, got %q", logs.String())
 	}
 }
