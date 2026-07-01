@@ -1,4 +1,4 @@
-.PHONY: tidy fmt test run-auth run-billing run-orders
+.PHONY: tidy fmt test run-auth run-billing run-orders docker-build docker-up docker-demo docker-down
 
 tidy:
 	go mod tidy
@@ -17,3 +17,15 @@ run-billing:
 
 run-orders:
 	go run ./examples/gin-orders-client
+
+docker-build:
+	docker build --build-arg TARGET=./cmd/orionis-auth -t orionis-auth:local .
+
+docker-up:
+	docker compose up --build --wait -d orionis-auth billing-api
+
+docker-demo:
+	docker compose run --rm orders-client
+
+docker-down:
+	docker compose down --remove-orphans

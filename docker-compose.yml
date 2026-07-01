@@ -1,0 +1,60 @@
+services:
+  orionis-auth:
+    build:
+      context: .
+      args:
+        TARGET: ./cmd/orionis-auth
+    command: ["-config", "/app/config/orionis.example.json"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/app/config:ro
+      - orionis-var:/app/var
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  billing-api:
+    build:
+      context: .
+      args:
+        TARGET: ./examples/gin-billing-service
+    environment:
+      BILLING_LISTEN: ":8081"
+      ORIONIS_AUDIENCE: "billing-api"
+      ORIONIS_ISSUER: "http://localhost:8080"
+      ORIONIS_JWKS_URL: "http://orionis-auth:8080/.well-known/jwks.json"
+    depends_on:
+      orionis-auth:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8081/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  orders-client:
+    build:
+      context: .
+      args:
+        TARGET: ./examples/gin-orders-client
+    environment:
+      BILLING_URL: "http://billing-api:8081/invoices"
+      ORIONIS_CLIENT_ID: "orders-service"
+      ORIONIS_CLIENT_SECRET: "orders-local-secret-change-me"
+      ORIONIS_TOKEN_URL: "http://orionis-auth:8080/oauth/token"
+    depends_on:
+      orionis-auth:
+        condition: service_healthy
+      billing-api:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  orionis-var:

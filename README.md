@@ -83,6 +83,47 @@ status=201
 {"amount":1500,"called_by":"orders-service","invoice_id":"inv_demo_001","order_id":"ord_demo_001","scope":"billing.invoice.create"}
 ```
 
+## Run with Docker
+
+Build the auth server image:
+
+```bash
+docker build --build-arg TARGET=./cmd/orionis-auth -t orionis-auth:local .
+```
+
+Run the local auth and billing demo stack:
+
+```bash
+docker compose up --build --wait -d orionis-auth billing-api
+```
+
+Run the orders demo client against the Compose network:
+
+```bash
+docker compose run --rm orders-client
+```
+
+Expected client output:
+
+```text
+status=201
+{"amount":1500,"called_by":"orders-service","invoice_id":"inv_demo_001","order_id":"ord_demo_001","scope":"billing.invoice.create"}
+```
+
+Stop the stack without deleting the generated signing key:
+
+```bash
+docker compose down --remove-orphans
+```
+
+The Compose stack mounts `config/` read-only and stores the local Ed25519 private key in the `orionis-var` named volume at `/app/var/orionis-ed25519.pem`. The existing signer loader creates that key on first start when it does not exist. Use `docker compose down -v` only when you intentionally want to delete the local demo key.
+
+The Dockerfile builds `./cmd/orionis-auth` by default. To package another main package, override `TARGET`:
+
+```bash
+docker build --build-arg TARGET=./examples/gin-billing-service -t orionis-billing-demo:local .
+```
+
 ## Manual token request
 
 ```bash
