@@ -56,6 +56,7 @@ const (
 
 type config struct {
 	Listen         string          `json:"listen"`
+	LogLevel       string          `json:"log_level"`
 	Issuer         string          `json:"issuer"`
 	AccessTokenTTL string          `json:"access_token_ttl"`
 	Key            keyConfig       `json:"key"`
@@ -108,6 +109,11 @@ func main() {
 		Build()
 	if err != nil {
 		slog.Error("create auth server", "error", err)
+		os.Exit(1)
+	}
+
+	if err := configureRuntimeMode(cfg.LogLevel); err != nil {
+		slog.Error("configure runtime mode", "error", err)
 		os.Exit(1)
 	}
 
@@ -164,6 +170,45 @@ func parseDurationDefault(value string, fallback time.Duration) (time.Duration, 
 	}
 
 	return d, nil
+}
+
+func configureRuntimeMode(logLevel string) error {
+	level, err := parseLogLevel(logLevel)
+	if err != nil {
+		return err
+	}
+
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
+
+	if level <= slog.LevelDebug {
+		gin.SetMode(gin.DebugMode)
+
+		return nil
+	}
+
+	gin.SetMode(gin.ReleaseMode)
+
+	return nil
+}
+
+func parseLogLevel(logLevel string) (slog.Level, error) {
+	logLevel = strings.TrimSpace(strings.ToLower(logLevel))
+	if logLevel == "" {
+		return slog.LevelInfo, nil
+	}
+
+	switch logLevel {
+	case "debug":
+		return slog.LevelDebug, nil
+	case "info":
+		return slog.LevelInfo, nil
+	case "warn":
+		return slog.LevelWarn, nil
+	case "error":
+		return slog.LevelError, nil
+	default:
+		return slog.LevelInfo, fmt.Errorf("unsupported log_level %q", logLevel)
+	}
 }
 
 func getenv(key, fallback string) string {

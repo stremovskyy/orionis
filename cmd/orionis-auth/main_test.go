@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 func TestNewHTTPServerHasProductionTimeouts(t *testing.T) {
@@ -70,6 +73,7 @@ func TestLoadConfigParsesValidJSON(t *testing.T) {
 	path := filepath.Join(dir, "orionis.json")
 	raw := []byte(`{
 		"listen": ":9090",
+		"log_level": "debug",
 		"issuer": "https://auth.orionis.test",
 		"access_token_ttl": "10m",
 		"key": {
@@ -99,6 +103,10 @@ func TestLoadConfigParsesValidJSON(t *testing.T) {
 		t.Fatalf("unexpected listen: %q", cfg.Listen)
 	}
 
+	if cfg.LogLevel != "debug" {
+		t.Fatalf("unexpected log level: %q", cfg.LogLevel)
+	}
+
 	if cfg.Issuer != "https://auth.orionis.test" {
 		t.Fatalf("unexpected issuer: %q", cfg.Issuer)
 	}
@@ -119,5 +127,53 @@ func TestLoadConfigRejectsMissingClients(t *testing.T) {
 
 	if _, err := loadConfig(path); err == nil {
 		t.Fatalf("expected config without clients to be rejected")
+	}
+}
+
+func TestConfigureRuntimeModeEnablesGinDebugForDebugLevel(t *testing.T) {
+	previous := gin.Mode()
+	previousLogger := slog.Default()
+	t.Cleanup(func() {
+		gin.SetMode(previous)
+		slog.SetDefault(previousLogger)
+	})
+
+	if err := configureRuntimeMode("debug"); err != nil {
+		t.Fatal(err)
+	}
+
+	if gin.Mode() != gin.DebugMode {
+		t.Fatalf("expected debug mode, got %q", gin.Mode())
+	}
+
+	if !slog.Default().Handler().Enabled(context.Background(), slog.LevelDebug) {
+		t.Fatalf("expected debug logs to be enabled")
+	}
+}
+
+func TestConfigureRuntimeModeUsesGinReleaseForInfoLevel(t *testing.T) {
+	previous := gin.Mode()
+	previousLogger := slog.Default()
+	t.Cleanup(func() {
+		gin.SetMode(previous)
+		slog.SetDefault(previousLogger)
+	})
+
+	if err := configureRuntimeMode("info"); err != nil {
+		t.Fatal(err)
+	}
+
+	if gin.Mode() != gin.ReleaseMode {
+		t.Fatalf("expected release mode, got %q", gin.Mode())
+	}
+
+	if slog.Default().Handler().Enabled(context.Background(), slog.LevelDebug) {
+		t.Fatalf("expected debug logs to be disabled for info level")
+	}
+}
+
+func TestConfigureRuntimeModeRejectsInvalidLogLevel(t *testing.T) {
+	if err := configureRuntimeMode("verbose"); err == nil {
+		t.Fatalf("expected invalid log level to be rejected")
 	}
 }

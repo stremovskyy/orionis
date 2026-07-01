@@ -332,6 +332,7 @@ verifier := orionis.NewVerifier().
 ```json
 {
   "listen": ":8080",
+  "log_level": "info",
   "issuer": "http://localhost:8080",
   "access_token_ttl": "15m",
   "key": {
