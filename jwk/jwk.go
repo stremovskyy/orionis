@@ -25,7 +25,9 @@
 package jwk
 
 import (
+	"bytes"
 	"context"
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
@@ -37,6 +39,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"net/http"
 	"os"
@@ -60,6 +63,11 @@ const (
 )
 
 var ErrKeyNotFound = errors.New("orionis jwk: key not found")
+
+const (
+	defaultRemoteHTTPTimeout = 10 * time.Second
+	maxJWKSResponseBody      = 1 << 20
+)
 
 type Key struct {
 	Kty string `json:"kty"`
@@ -148,15 +156,18 @@ func DecodePublicKey(k Key) (any, error) {
 			return nil, fmt.Errorf("decode ec y: %w", err)
 		}
 
-		curve := elliptic.P256()
 		x := new(big.Int).SetBytes(xBytes)
 		y := new(big.Int).SetBytes(yBytes)
+		encoded := make([]byte, 1, 1+len(xBytes)+len(yBytes))
+		encoded[0] = 4
+		encoded = append(encoded, xBytes...)
+		encoded = append(encoded, yBytes...)
 
-		if !curve.IsOnCurve(x, y) {
+		if _, err := ecdh.P256().NewPublicKey(encoded); err != nil {
 			return nil, errors.New("ec key is not on curve")
 		}
 
-		return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
+		return &ecdsa.PublicKey{Curve: elliptic.P256(), X: x, Y: y}, nil
 
 	default:
 		return nil, fmt.Errorf("unsupported kty %q", k.Kty)
@@ -358,7 +369,7 @@ func NewRemoteProvider(cfg RemoteConfig) (*RemoteProvider, error) {
 	}
 
 	if cfg.HTTPClient == nil {
-		cfg.HTTPClient = http.DefaultClient
+		cfg.HTTPClient = defaultRemoteHTTPClient()
 	}
 
 	if cfg.RefreshInterval <= 0 {
@@ -436,7 +447,7 @@ func (p *RemoteProvider) Refresh(ctx context.Context) error {
 
 	var set Set
 
-	if err := json.NewDecoder(res.Body).Decode(&set); err != nil {
+	if err := decodeBoundedJSON(res.Body, maxJWKSResponseBody, &set); err != nil {
 		return fmt.Errorf("decode jwks: %w", err)
 	}
 
@@ -616,4 +627,21 @@ func LoadOrCreateEd25519Signer(path string, kid string) (*Ed25519Signer, error) 
 	}
 
 	return signer, nil
+}
+
+func defaultRemoteHTTPClient() *http.Client {
+	return &http.Client{Timeout: defaultRemoteHTTPTimeout}
+}
+
+func decodeBoundedJSON(r io.Reader, maxBytes int64, dst any) error {
+	raw, err := io.ReadAll(io.LimitReader(r, maxBytes+1))
+	if err != nil {
+		return err
+	}
+
+	if int64(len(raw)) > maxBytes {
+		return fmt.Errorf("response body too large: limit=%d bytes", maxBytes)
+	}
+
+	return json.NewDecoder(bytes.NewReader(raw)).Decode(dst)
 }

@@ -25,14 +25,18 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -40,6 +44,14 @@ import (
 	"github.com/stremovskyy/orionis/ginorion"
 	"github.com/stremovskyy/orionis/jwk"
 	"github.com/stremovskyy/orionis/server"
+)
+
+const (
+	defaultReadHeaderTimeout = 5 * time.Second
+	defaultReadTimeout       = 15 * time.Second
+	defaultWriteTimeout      = 15 * time.Second
+	defaultIdleTimeout       = 60 * time.Second
+	defaultShutdownTimeout   = 10 * time.Second
 )
 
 type config struct {
@@ -104,7 +116,11 @@ func main() {
 
 	slog.Info("orionis auth server started", "listen", cfg.Listen, "issuer", cfg.Issuer, "kid", signer.KeyID())
 
-	if err := r.Run(cfg.Listen); err != nil {
+	httpServer := newHTTPServer(cfg.Listen, r)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if err := serveHTTPServer(ctx, httpServer, defaultShutdownTimeout, httpServer.ListenAndServe); err != nil {
 		slog.Error("gin server stopped", "error", err)
 		os.Exit(1)
 	}
@@ -171,4 +187,46 @@ func expandPath(path string) string {
 	}
 
 	return path
+}
+
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: defaultReadHeaderTimeout,
+		ReadTimeout:       defaultReadTimeout,
+		WriteTimeout:      defaultWriteTimeout,
+		IdleTimeout:       defaultIdleTimeout,
+	}
+}
+
+func serveHTTPServer(ctx context.Context, server *http.Server, shutdownTimeout time.Duration, serve func() error) error {
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- serve()
+	}()
+
+	select {
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			return err
+		}
+
+		err := <-errCh
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+
+		return nil
+
+	case err := <-errCh:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+
+		return err
+	}
 }

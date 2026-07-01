@@ -25,10 +25,12 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -39,6 +41,11 @@ import (
 )
 
 var ErrTokenRequestFailed = errors.New("orionis client: token request failed")
+
+const (
+	defaultTokenHTTPTimeout = 10 * time.Second
+	maxTokenResponseBody    = 1 << 20
+)
 
 type Authenticator interface {
 	Authenticate(req *http.Request) error
@@ -201,7 +208,7 @@ func (b *Builder) Build() (*Provider, error) {
 	}
 
 	if cfg.HTTPClient == nil {
-		cfg.HTTPClient = http.DefaultClient
+		cfg.HTTPClient = defaultTokenHTTPClient()
 	}
 
 	if cfg.RefreshSkew <= 0 {
@@ -471,9 +478,12 @@ func (p *Provider) requestToken(ctx context.Context, audience string, scopes []s
 			Error            string `json:"error"`
 			ErrorDescription string `json:"error_description"`
 		}
-		_ = json.NewDecoder(res.Body).Decode(&oauthErr)
+		raw, err := readBoundedBody(res.Body, maxTokenResponseBody)
+		if err != nil {
+			return cachedToken{}, fmt.Errorf("%w: status=%d: %v", ErrTokenRequestFailed, res.StatusCode, err)
+		}
 
-		if oauthErr.Error != "" {
+		if err := json.Unmarshal(raw, &oauthErr); err == nil && oauthErr.Error != "" {
 			return cachedToken{}, fmt.Errorf(
 				"%w: status=%d error=%s description=%s",
 				ErrTokenRequestFailed,
@@ -488,7 +498,7 @@ func (p *Provider) requestToken(ctx context.Context, audience string, scopes []s
 
 	var tr orionis.TokenResponse
 
-	if err := json.NewDecoder(res.Body).Decode(&tr); err != nil {
+	if err := decodeBoundedJSON(res.Body, maxTokenResponseBody, &tr); err != nil {
 		return cachedToken{}, fmt.Errorf("decode token response: %w", err)
 	}
 
@@ -575,4 +585,30 @@ func NewHTTPClient(base *http.Client, provider *Provider, audience string, scope
 
 func cacheKey(audience string, scopes []string) string {
 	return strings.TrimSpace(audience) + "|" + orionis.ScopeString(scopes)
+}
+
+func defaultTokenHTTPClient() *http.Client {
+	return &http.Client{Timeout: defaultTokenHTTPTimeout}
+}
+
+func decodeBoundedJSON(r io.Reader, maxBytes int64, dst any) error {
+	raw, err := readBoundedBody(r, maxBytes)
+	if err != nil {
+		return err
+	}
+
+	return json.NewDecoder(bytes.NewReader(raw)).Decode(dst)
+}
+
+func readBoundedBody(r io.Reader, maxBytes int64) ([]byte, error) {
+	raw, err := io.ReadAll(io.LimitReader(r, maxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+
+	if int64(len(raw)) > maxBytes {
+		return nil, fmt.Errorf("response body too large: limit=%d bytes", maxBytes)
+	}
+
+	return raw, nil
 }

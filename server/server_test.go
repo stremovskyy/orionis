@@ -106,6 +106,36 @@ func TestInvalidScopeRejected(t *testing.T) {
 	}
 }
 
+func TestTokenRequestBodyLimitRejected(t *testing.T) {
+	auth, _ := newTestServer(t)
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(strings.Repeat("a", server.DefaultMaxTokenRequestBody+1)))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	res := httptest.NewRecorder()
+	auth.TokenHTTP(res, req)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", res.Code, res.Body.String())
+	}
+}
+
+func TestClientSecretPostAuthentication(t *testing.T) {
+	auth, _ := newTestServer(t)
+	form := url.Values{}
+	form.Set("grant_type", "client_credentials")
+	form.Set("audience", "billing-api")
+	form.Set("scope", "billing.invoice.create")
+	form.Set("client_id", "orders-service")
+	form.Set("client_secret", "secret")
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	res := httptest.NewRecorder()
+	auth.TokenHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+}
+
 func newTestServer(t *testing.T) (*server.Server, *jwk.Ed25519Signer) {
 	t.Helper()
 	signer, err := jwk.Ed25519().KID("test-ed25519").Build()

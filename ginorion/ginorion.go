@@ -26,6 +26,7 @@ package ginorion
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -499,12 +500,42 @@ func RegisterAuthRoutes(routes gin.IRoutes, auth *server.Server) {
 }
 
 func defaultErrorHandler(c *gin.Context, status int, code string, err error) {
+	attrs := []any{"status", status, "code", code}
+	if err != nil {
+		attrs = append(attrs, "error", err)
+	}
+
+	if status >= http.StatusInternalServerError {
+		slog.ErrorContext(c.Request.Context(), "orionis auth middleware error", attrs...)
+	} else {
+		slog.WarnContext(c.Request.Context(), "orionis auth request rejected", attrs...)
+	}
+
 	c.JSON(
 		status, gin.H{
 			"error":   code,
-			"message": err.Error(),
+			"message": publicErrorMessage(status, code),
 		},
 	)
+}
+
+func publicErrorMessage(status int, code string) string {
+	switch code {
+	case "missing_bearer_token":
+		return "missing bearer token"
+	case "invalid_token":
+		return "invalid token"
+	case "insufficient_scope":
+		return "insufficient scope"
+	case "auth_misconfigured":
+		return "authentication service unavailable"
+	default:
+		if status >= http.StatusInternalServerError {
+			return "authentication service unavailable"
+		}
+
+		return "authentication request rejected"
+	}
 }
 
 func firstScopes(primary []string, fallback []string) []string {
