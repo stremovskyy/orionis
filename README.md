@@ -106,6 +106,7 @@ If PHP is not installed locally, run the example through Docker:
 
 ```bash
 docker run --rm \
+  --add-host=host.docker.internal:host-gateway \
   -v "$PWD:/work" \
   -w /work \
   -e ORIONIS_TOKEN_URL=http://host.docker.internal:8080/oauth/token \
