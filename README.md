@@ -40,6 +40,8 @@ orionis/
   server/                        OAuth2 token endpoint, JWKS endpoint, client registry
   examples/gin-billing-service/  Protected GIN resource server example
   examples/gin-orders-client/    Client service example that calls billing
+  examples/java-orders-client/   Java calling-service example without Maven dependencies
+  examples/php-orders-client/    PHP calling-service example without Composer dependencies
   config/orionis.example.json    Local development config
   docs/architecture.md           Architecture notes
 ```
@@ -81,6 +83,45 @@ Expected client output:
 ```text
 status=201
 {"amount":1500,"called_by":"orders-service","invoice_id":"inv_demo_001","order_id":"ord_demo_001","scope":"billing.invoice.create"}
+```
+
+The Java and PHP examples use the same local auth and billing services. They first request an OAuth2
+`client_credentials` access token from Orionis, then call billing with `Authorization: Bearer <token>`.
+
+Run the Java client:
+
+```bash
+cd ~/go/src/github.com/stremovskyy/orionis
+make run-java-client
+```
+
+Run the PHP client when PHP is installed locally:
+
+```bash
+cd ~/go/src/github.com/stremovskyy/orionis
+make run-php-client
+```
+
+If PHP is not installed locally, run the example through Docker:
+
+```bash
+docker run --rm \
+  -v "$PWD:/work" \
+  -w /work \
+  -e ORIONIS_TOKEN_URL=http://host.docker.internal:8080/oauth/token \
+  -e BILLING_URL=http://host.docker.internal:8081/invoices \
+  php:8.4-cli php examples/php-orders-client/orders_client.php
+```
+
+Both examples accept these environment variables:
+
+```text
+ORIONIS_TOKEN_URL      default: http://localhost:8080/oauth/token
+BILLING_URL            default: http://localhost:8081/invoices
+ORIONIS_CLIENT_ID      default: orders-service
+ORIONIS_CLIENT_SECRET  default: orders-local-secret-change-me
+ORIONIS_AUDIENCE       default: billing-api
+ORIONIS_SCOPE          default: billing.invoice.create
 ```
 
 ## Run with Docker
