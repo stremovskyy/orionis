@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Orionis API cookbook for service-to-service OAuth 2.0 integrations.">
+    <title>Orionis API</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="index.html">Orionis</a>
+      <nav aria-label="Primary navigation">
+        <a href="deploy.html">Deploy</a>
+        <a href="api.html">API</a>
+        <a href="security.html">Security</a>
+        <a href="https://pkg.go.dev/github.com/stremovskyy/orionis">Go Reference</a>
+      </nav>
+    </header>
+    <main class="doc-layout">
+      <h1>API cookbook</h1>
+      <p>Orionis keeps caller, resource, and auth-server integration blocks readable.</p>
+
+      <h2>Calling service</h2>
+      <pre><code>hc, err := client.New().
+    TokenURL("http://orionis-auth.internal/oauth/token").
+    As("orders-service", "load-from-secrets-manager").
+    For("billing-api", "billing.invoice.create").
+    BuildHTTPClient(http.DefaultClient)</code></pre>
+
+      <h2>GIN resource service</h2>
+      <pre><code>guard, err := ginorion.New().
+    Issuer("http://orionis-auth.internal").
+    Audience("billing-api").
+    JWKS("http://orionis-auth.internal/.well-known/jwks.json").
+    Build()
+
+r.POST("/invoices", guard.Require("billing.invoice.create"), handler)</code></pre>
+
+      <h2>Auth server endpoints</h2>
+      <pre><code>POST /oauth/token
+GET  /.well-known/jwks.json
+GET  /.well-known/openid-configuration
+GET  /healthz</code></pre>
+    </main>
+  </body>
+</html>

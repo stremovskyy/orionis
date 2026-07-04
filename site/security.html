@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Production security notes for Orionis deployments.">
+    <title>Orionis Security</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="index.html">Orionis</a>
+      <nav aria-label="Primary navigation">
+        <a href="deploy.html">Deploy</a>
+        <a href="api.html">API</a>
+        <a href="security.html">Security</a>
+        <a href="https://github.com/stremovskyy/orionis">GitHub</a>
+      </nav>
+    </header>
+    <main class="doc-layout">
+      <h1>Production security</h1>
+      <p>Orionis is intentionally small, but production deployments still need clear operational boundaries.</p>
+
+      <h2>Secrets</h2>
+      <ul>
+        <li>Prefer `secret_sha256_hex` in config.</li>
+        <li>Keep plaintext client secrets outside Git.</li>
+        <li>Use one client id per calling service.</li>
+      </ul>
+
+      <h2>Keys</h2>
+      <ul>
+        <li>Persist `/app/var` for container deployments.</li>
+        <li>Keep private signing keys readable only by the auth server.</li>
+        <li>Publish old and new public keys together during rotation.</li>
+      </ul>
+
+      <h2>Tokens</h2>
+      <ul>
+        <li>Use short access token TTLs, usually 5 to 15 minutes.</li>
+        <li>Validate issuer, audience, time claims, signature, token use, and scopes.</li>
+        <li>Do not reuse tokens across audiences.</li>
+      </ul>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Deploy Orionis from Docker Hub or GitHub Container Registry.">
+    <title>Deploy Orionis</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="index.html">Orionis</a>
+      <nav aria-label="Primary navigation">
+        <a href="deploy.html">Deploy</a>
+        <a href="api.html">API</a>
+        <a href="security.html">Security</a>
+        <a href="https://github.com/stremovskyy/orionis/wiki">Wiki</a>
+      </nav>
+    </header>
+    <main class="doc-layout">
+      <h1>Deploy Orionis</h1>
+      <p>Use Docker Hub as the primary public image source, or GitHub Container Registry when you want a GitHub-native mirror.</p>
+
+      <h2>Docker Hub</h2>
+      <pre><code>docker pull stremovskyy/orionis:latest</code></pre>
+
+      <h2>GitHub Container Registry</h2>
+      <pre><code>docker pull ghcr.io/stremovskyy/orionis:latest</code></pre>
+
+      <h2>Run the auth server</h2>
+      <pre><code>test -f config/orionis.json || cp config/orionis.example.json config/orionis.json
+
+docker run --rm -d \
+  --name orionis-auth \
+  -p 8080:8080 \
+  -v "$PWD/config:/app/config:ro" \
+  -v orionis-var:/app/var \
+  stremovskyy/orionis:latest</code></pre>
+
+      <h2>Verify health</h2>
+      <pre><code>curl -fsS http://localhost:8080/healthz</code></pre>
+    </main>
+  </body>
+</html>

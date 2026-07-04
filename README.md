@@ -8,6 +8,9 @@
 [![Docker Image Version](https://img.shields.io/docker/v/stremovskyy/orionis?sort=semver)](https://hub.docker.com/r/stremovskyy/orionis)
 [![Docker Pulls](https://img.shields.io/docker/pulls/stremovskyy/orionis)](https://hub.docker.com/r/stremovskyy/orionis)
 [![Docker Image Size](https://img.shields.io/docker/image-size/stremovskyy/orionis/latest)](https://hub.docker.com/r/stremovskyy/orionis)
+[![GHCR](https://img.shields.io/badge/ghcr.io-stremovskyy%2Forionis-24292f?logo=github)](https://github.com/stremovskyy/orionis/pkgs/container/orionis)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-0f766e)](https://stremovskyy.github.io/orionis/)
+[![Wiki](https://img.shields.io/badge/wiki-Orionis-57636f)](https://github.com/stremovskyy/orionis/wiki)
 [![License](https://img.shields.io/github/license/stremovskyy/orionis)](LICENSE)
 
 **Orionis** is a compact Go toolkit and GIN authorization server for service-to-service OAuth 2.0 `client_credentials`, signed JWT access tokens, JWKS validation, token caching, and drop-in GIN middleware.
@@ -54,6 +57,9 @@ orionis/
   examples/php-orders-client/    PHP calling-service example without Composer dependencies
   config/orionis.example.json    Local development config
   docs/architecture.md           Architecture notes
+  docs/wiki/                     GitHub Wiki source pages
+  site/                          Static GitHub Pages site
+  scripts/publish-wiki.sh        Wiki publication helper
 ```
 
 ## Design goals
@@ -143,6 +149,12 @@ Pull the published auth server image from Docker Hub:
 docker pull stremovskyy/orionis:latest
 ```
 
+Or pull the GitHub Packages mirror from GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/stremovskyy/orionis:latest
+```
+
 Run Orionis from the published image:
 
 ```bash
@@ -168,13 +180,26 @@ curl -fsS http://localhost:8080/healthz
 Pin a released image in deployed environments:
 
 ```bash
-ORIONIS_IMAGE_TAG=0.1.1 docker compose -f docker-compose.release.yml up -d
+ORIONIS_IMAGE_TAG=0.1.2 docker compose -f docker-compose.release.yml up -d
 ```
 
 The published image expects its config at `/app/config/orionis.json` by default.
 Mount the config read-only, mount `/app/var` as persistent storage for the Ed25519 signing key,
 replace demo secrets before sharing an environment, and prefer `secret_sha256_hex` over plaintext
 secrets in deployed configs.
+
+The GitHub Container Registry image uses the same tags as Docker Hub:
+
+```bash
+docker pull ghcr.io/stremovskyy/orionis:0.1.2
+
+docker run --rm -d \
+  --name orionis-auth \
+  -p 8080:8080 \
+  -v "$PWD/config:/app/config:ro" \
+  -v orionis-var:/app/var \
+  ghcr.io/stremovskyy/orionis:0.1.2
+```
 
 Build the auth server image:
 

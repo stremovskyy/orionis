@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Orionis service-to-service OAuth 2.0 toolkit for Go and GIN.">
+    <title>Orionis</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="index.html">Orionis</a>
+      <nav aria-label="Primary navigation">
+        <a href="deploy.html">Deploy</a>
+        <a href="api.html">API</a>
+        <a href="security.html">Security</a>
+        <a href="https://github.com/stremovskyy/orionis">GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Service-to-service identity for Go</p>
+          <h1>Orionis</h1>
+          <p class="lede">OAuth 2.0 client credentials, signed JWT access tokens, JWKS validation, token caching, and GIN middleware in a compact Go toolkit.</p>
+          <div class="actions">
+            <a class="button primary" href="deploy.html">Deploy container</a>
+            <a class="button secondary" href="api.html">Read API guide</a>
+          </div>
+        </div>
+        <div class="flow-panel" aria-label="Service token flow diagram">
+          <div class="node caller">orders-service</div>
+          <div class="arrow">POST /oauth/token</div>
+          <div class="node auth">orionis-auth</div>
+          <div class="arrow">JWT + JWKS</div>
+          <div class="node resource">billing-api</div>
+        </div>
+      </section>
+
+      <section class="quick-grid" aria-label="Quick start commands">
+        <article>
+          <h2>Run locally</h2>
+          <pre><code>go run ./cmd/orionis-auth -config ./config/orionis.example.json</code></pre>
+        </article>
+        <article>
+          <h2>Docker Hub</h2>
+          <pre><code>docker pull stremovskyy/orionis:latest</code></pre>
+        </article>
+        <article>
+          <h2>GHCR</h2>
+          <pre><code>docker pull ghcr.io/stremovskyy/orionis:latest</code></pre>
+        </article>
+      </section>
+
+      <section class="content-band">
+        <h2>What Orionis gives you</h2>
+        <ul class="feature-list">
+          <li>Readable chain-first builders for clients, resource guards, and auth-server routes.</li>
+          <li>Ed25519 JWT signing by default with signer interfaces for KMS, Vault, HSM, or other algorithms.</li>
+          <li>Local JWT validation in resource services through JWKS, without per-request auth-server calls.</li>
+          <li>Docker Hub and GitHub Packages images for simple deployment.</li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>
