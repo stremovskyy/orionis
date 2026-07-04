@@ -56,6 +56,7 @@ orionis/
   examples/java-orders-client/   Java calling-service example without Maven dependencies
   examples/php-orders-client/    PHP calling-service example without Composer dependencies
   config/orionis.example.json    Local development config
+  deploy/aws/ecs/                AWS ECS/Fargate task definition and guide
   docs/architecture.md           Architecture notes
   docs/wiki/                     GitHub Wiki source pages
   site/                          Static GitHub Pages site
@@ -199,6 +200,27 @@ docker run --rm -d \
   -v orionis-var:/app/var \
   ghcr.io/stremovskyy/orionis:0.1.2
 ```
+
+## Deploy on AWS ECS Fargate
+
+Use the templates in [`deploy/aws/ecs`](deploy/aws/ecs) to run the published image on ECS Fargate.
+The default task definition uses `stremovskyy/orionis:0.1.2`, `awsvpc` networking, CloudWatch logs,
+a `/healthz` container health check, AWS Secrets Manager for `ORIONIS_CONFIG_JSON`, and EFS mounted
+at `/app/var` for the Ed25519 signing key.
+
+Start from the example config and task definition:
+
+```bash
+cp deploy/aws/ecs/orionis-config.example.json /tmp/orionis-config.json
+
+aws secretsmanager create-secret \
+  --name orionis/config \
+  --secret-string file:///tmp/orionis-config.json
+```
+
+Then follow [`deploy/aws/ecs/README.md`](deploy/aws/ecs/README.md) to create the EFS access point,
+render the task definition with your AWS resource placeholders, register it, and deploy an ECS service.
+Use EFS access point POSIX owner `100:101`, matching the `orionis` user inside the image.
 
 Build the auth server image:
 

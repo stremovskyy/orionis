@@ -5,7 +5,7 @@ Orionis is a compact Go toolkit and GIN authorization server for service-to-serv
 ## Start here
 
 - [Quick Start](Quick-Start): run the local auth server, billing API, and client examples.
-- [Docker and GHCR](Docker-and-GHCR): deploy from Docker Hub or GitHub Container Registry.
+- [Docker, GHCR, and AWS ECS](Docker-and-GHCR): deploy from Docker Hub, GitHub Container Registry, or ECS Fargate.
 - [Service-to-Service Guide](Service-to-Service-Guide): model callers, audiences, and scopes.
 - [Production Security](Production-Security): keep secrets, keys, logs, and token boundaries safe.
 
@@ -33,3 +33,5 @@ docker pull stremovskyy/orionis:latest
 docker pull ghcr.io/stremovskyy/orionis:latest
 go get github.com/stremovskyy/orionis
 ```
+
+AWS ECS/Fargate templates live in `deploy/aws/ecs/`.

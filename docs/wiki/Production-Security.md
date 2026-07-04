@@ -11,6 +11,7 @@
 
 - Keep private signing keys writable only by the Orionis auth-server process.
 - Mount `/app/var` as persistent storage when using the published container.
+- On ECS/Fargate, mount `/app/var` through EFS and use an access point owned by `uid=100`, `gid=101`.
 - Back up production signing keys through your normal secret backup path.
 - Publish old and new public keys together during key rotation until every token signed by the old key has expired.
 

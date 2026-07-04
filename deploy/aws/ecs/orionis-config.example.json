@@ -1,0 +1,19 @@
+{
+  "listen": ":8080",
+  "log_level": "info",
+  "issuer": "https://auth.example.internal",
+  "access_token_ttl": "15m",
+  "key": {
+    "kid": "orionis-ecs-ed25519-1",
+    "private_key_path": "/app/var/orionis-ed25519.pem"
+  },
+  "clients": [
+    {
+      "id": "caller-service",
+      "secret_sha256_hex": ["<CLIENT_SECRET_SHA256_HEX>"],
+      "allowed_audiences": ["target-api"],
+      "allowed_scopes": ["target.read", "target.write"],
+      "default_scopes": ["target.read"]
+    }
+  ]
+}

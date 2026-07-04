@@ -1,0 +1,81 @@
+{
+  "family": "orionis-auth",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "executionRoleArn": "${ORIONIS_EXECUTION_ROLE_ARN}",
+  "taskRoleArn": "${ORIONIS_TASK_ROLE_ARN}",
+  "volumes": [
+    {
+      "name": "orionis-var",
+      "efsVolumeConfiguration": {
+        "fileSystemId": "${ORIONIS_EFS_FILE_SYSTEM_ID}",
+        "transitEncryption": "ENABLED",
+        "authorizationConfig": {
+          "accessPointId": "${ORIONIS_EFS_ACCESS_POINT_ID}",
+          "iam": "ENABLED"
+        }
+      }
+    }
+  ],
+  "containerDefinitions": [
+    {
+      "name": "orionis-auth",
+      "image": "stremovskyy/orionis:0.1.2",
+      "essential": true,
+      "entryPoint": ["/bin/sh", "-c"],
+      "command": [
+        "printf '%s' \"$ORIONIS_CONFIG_JSON\" > /tmp/orionis.json && exec /usr/local/bin/orionis -config /tmp/orionis.json"
+      ],
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "hostPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "GIN_MODE",
+          "value": "release"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "ORIONIS_CONFIG_JSON",
+          "valueFrom": "${ORIONIS_CONFIG_SECRET_ARN}"
+        }
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "orionis-var",
+          "containerPath": "/app/var",
+          "readOnly": false
+        }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 10
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "${ORIONIS_LOG_GROUP}",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "orionis"
+        }
+      }
+    }
+  ]
+}
