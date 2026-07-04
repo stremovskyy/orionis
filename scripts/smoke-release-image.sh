@@ -58,7 +58,7 @@ docker run -d \
 
 port=""
 for _ in $(seq 1 30); do
-  port="$(docker port "$container" 8080/tcp 2>/dev/null | awk -F: 'END {print $NF}')"
+  port="$(docker port "$container" 8080/tcp 2>/dev/null | awk -F: 'END {print $NF}' || true)"
   if [[ -n "$port" ]] && curl -fsS "http://127.0.0.1:$port/healthz" >/dev/null 2>&1; then
     break
   fi
