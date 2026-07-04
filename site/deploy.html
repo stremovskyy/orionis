@@ -22,10 +22,10 @@
       <p>Use Docker Hub as the primary public image source, or GitHub Container Registry when you want a GitHub-native mirror.</p>
 
       <h2>Docker Hub</h2>
-      <pre><code>docker pull stremovskyy/orionis:latest</code></pre>
+      <pre><code>docker pull stremovskyy/orionis:0.2.0</code></pre>
 
       <h2>GitHub Container Registry</h2>
-      <pre><code>docker pull ghcr.io/stremovskyy/orionis:latest</code></pre>
+      <pre><code>docker pull ghcr.io/stremovskyy/orionis:0.2.0</code></pre>
 
       <h2>Run the auth server</h2>
       <pre><code>test -f config/orionis.json || cp config/orionis.example.json config/orionis.json
@@ -35,18 +35,24 @@ docker run --rm -d \
   -p 8080:8080 \
   -v "$PWD/config:/app/config:ro" \
   -v orionis-var:/app/var \
-  stremovskyy/orionis:latest</code></pre>
+  stremovskyy/orionis:0.2.0</code></pre>
 
       <h2>Verify health</h2>
-      <pre><code>curl -fsS http://localhost:8080/healthz</code></pre>
+      <pre><code>curl -fsS http://localhost:8080/healthz
+curl -fsS http://localhost:8080/readyz</code></pre>
 
       <h2>AWS ECS Fargate</h2>
       <p>Use the checked-in ECS templates when you want a managed AWS deployment from the public image.</p>
       <pre><code>openssl genpkey -algorithm ED25519 > /tmp/orionis-ed25519.pem
+openssl genpkey -algorithm ED25519 > /tmp/orionis-ed25519-old.pem
 
 aws secretsmanager create-secret \
   --name orionis/signing-key \
   --secret-string file:///tmp/orionis-ed25519.pem
+
+aws secretsmanager create-secret \
+  --name orionis/signing-key-old \
+  --secret-string file:///tmp/orionis-ed25519-old.pem
 
 aws secretsmanager create-secret \
   --name orionis/config \

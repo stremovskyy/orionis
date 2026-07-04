@@ -146,13 +146,13 @@ ORIONIS_SCOPE          default: billing.invoice.create
 Pull the published auth server image from Docker Hub:
 
 ```bash
-docker pull stremovskyy/orionis:latest
+docker pull stremovskyy/orionis:0.2.0
 ```
 
 Or pull the GitHub Packages mirror from GitHub Container Registry:
 
 ```bash
-docker pull ghcr.io/stremovskyy/orionis:latest
+docker pull ghcr.io/stremovskyy/orionis:0.2.0
 ```
 
 Run Orionis from the published image:
@@ -165,7 +165,7 @@ docker run --rm -d \
   -p 8080:8080 \
   -v "$PWD/config:/app/config:ro" \
   -v orionis-var:/app/var \
-  stremovskyy/orionis:latest
+  stremovskyy/orionis:0.2.0
 ```
 
 Or use the release Compose file:
@@ -173,42 +173,43 @@ Or use the release Compose file:
 ```bash
 test -f config/orionis.json || cp config/orionis.example.json config/orionis.json
 
-ORIONIS_IMAGE_TAG=latest docker compose -f docker-compose.release.yml up -d
+docker compose -f docker-compose.release.yml up -d
 curl -fsS http://localhost:8080/healthz
+curl -fsS http://localhost:8080/readyz
 ```
 
 Pin a released image in deployed environments:
 
 ```bash
-ORIONIS_IMAGE_TAG=0.1.3 docker compose -f docker-compose.release.yml up -d
+ORIONIS_IMAGE_TAG=0.2.0 docker compose -f docker-compose.release.yml up -d
 ```
 
 The published image expects its config at `/app/config/orionis.json` by default.
 Mount the config read-only, replace demo secrets before sharing an environment, and prefer
 `secret_sha256_hex` over plaintext secrets in deployed configs. Local Docker examples use
-`/app/var` for a generated demo signing key; ECS/Fargate should load the signing key from
-an injected secret environment variable instead.
+`/app/var` for generated demo signing keys; ECS/Fargate should load signing keys from
+injected secret environment variables instead.
 
 The GitHub Container Registry image uses the same tags as Docker Hub:
 
 ```bash
-docker pull ghcr.io/stremovskyy/orionis:0.1.3
+docker pull ghcr.io/stremovskyy/orionis:0.2.0
 
 docker run --rm -d \
   --name orionis-auth \
   -p 8080:8080 \
   -v "$PWD/config:/app/config:ro" \
   -v orionis-var:/app/var \
-  ghcr.io/stremovskyy/orionis:0.1.3
+  ghcr.io/stremovskyy/orionis:0.2.0
 ```
 
 ## Deploy on AWS ECS Fargate
 
 Use the templates in [`deploy/aws/ecs`](deploy/aws/ecs) to run the published image on ECS Fargate.
-The default task definition uses `stremovskyy/orionis:0.1.3`, `awsvpc` networking, CloudWatch logs,
-a `/healthz` container health check, AWS Secrets Manager for `ORIONIS_CONFIG_JSON`, and AWS Secrets
-Manager secret injection for `ORIONIS_SIGNING_KEY_PEM`. It does not mount EFS or write the signing
-key to `/app/var`.
+The default task definition uses `stremovskyy/orionis:0.2.0`, `awsvpc` networking, CloudWatch logs,
+a `/healthz` container health check, `/readyz` readiness endpoint, AWS Secrets Manager for
+`ORIONIS_CONFIG_JSON`, and AWS Secrets Manager secret injection for overlapping signing-key PEMs.
+It does not mount EFS or write signing keys to `/app/var`.
 
 Start from the example config and task definition:
 
@@ -220,18 +221,24 @@ aws secretsmanager create-secret \
   --secret-string file:///tmp/orionis-config.json
 ```
 
-Create the signing-key secret as PKCS8 PEM:
+Create active and previous signing-key secrets as PKCS8 PEM. The example ECS config publishes both
+keys and signs new tokens with `active_kid`:
 
 ```bash
 openssl genpkey -algorithm ED25519 > /tmp/orionis-ed25519.pem
+openssl genpkey -algorithm ED25519 > /tmp/orionis-ed25519-old.pem
 
 aws secretsmanager create-secret \
   --name orionis/signing-key \
   --secret-string file:///tmp/orionis-ed25519.pem
+
+aws secretsmanager create-secret \
+  --name orionis/signing-key-old \
+  --secret-string file:///tmp/orionis-ed25519-old.pem
 ```
 
 Then follow [`deploy/aws/ecs/README.md`](deploy/aws/ecs/README.md) to grant the ECS task execution
-role access to both secrets, render the task definition with your AWS resource placeholders, register
+role access to the config and both signing-key secrets, render the task definition with your AWS resource placeholders, register
 it, and deploy an ECS service.
 
 Build the auth server image:
@@ -265,7 +272,7 @@ Stop the stack without deleting the generated signing key:
 docker compose down --remove-orphans
 ```
 
-The Compose stack mounts `config/` read-only and stores the local Ed25519 private key in the `orionis-var` named volume at `/app/var/orionis-ed25519.pem`. The existing signer loader creates that key on first start when it does not exist. Use `docker compose down -v` only when you intentionally want to delete the local demo key.
+The Compose stack mounts `config/` read-only and stores generated local Ed25519 private keys in the `orionis-var` named volume under `/app/var`. The example config uses `/app/var/orionis-ed25519-1.pem` and `/app/var/orionis-ed25519-2.pem`; the signer loader creates missing keys on first start. Use `docker compose down -v` only when you intentionally want to delete local demo keys.
 
 The Dockerfile builds `./cmd/orionis-auth` by default. To package another main package, override `TARGET`:
 
@@ -442,6 +449,7 @@ POST /oauth/token
 GET  /.well-known/jwks.json
 GET  /.well-known/openid-configuration
 GET  /healthz
+GET  /readyz
 ```
 
 ## 6. Static public key instead of remote JWKS
@@ -484,10 +492,22 @@ verifier := orionis.NewVerifier().
   "log_level": "info",
   "issuer": "http://localhost:8080",
   "access_token_ttl": "15m",
-  "key": {
-    "kid": "orionis-local-ed25519-1",
-    "private_key_path": "./var/orionis-ed25519.pem"
+  "active_kid": "orionis-local-ed25519-2",
+  "keys": [
+    {
+      "kid": "orionis-local-ed25519-1",
+      "private_key_path": "./var/orionis-ed25519-1.pem"
+    },
+    {
+      "kid": "orionis-local-ed25519-2",
+      "private_key_path": "./var/orionis-ed25519-2.pem"
+    }
+  ],
+  "rate_limits": {
+    "token": {"enabled": true, "limit": 60, "window": "1m"},
+    "readyz": {"enabled": true, "limit": 300, "window": "1m"}
   },
+  "audit_logs": {"enabled": true},
   "clients": [
     {
       "id": "orders-service",
@@ -527,10 +547,22 @@ Add the caller service to the auth server config:
   "log_level": "info",
   "issuer": "https://auth.example.internal",
   "access_token_ttl": "15m",
-  "key": {
-    "kid": "orionis-dev-ed25519-1",
-    "private_key_pem_env": "ORIONIS_SIGNING_KEY_PEM"
+  "active_kid": "orionis-dev-ed25519-2",
+  "keys": [
+    {
+      "kid": "orionis-dev-ed25519-1",
+      "private_key_pem_env": "ORIONIS_SIGNING_KEY_PEM_OLD"
+    },
+    {
+      "kid": "orionis-dev-ed25519-2",
+      "private_key_pem_env": "ORIONIS_SIGNING_KEY_PEM"
+    }
+  ],
+  "rate_limits": {
+    "token": {"enabled": true, "limit": 60, "window": "1m"},
+    "readyz": {"enabled": true, "limit": 300, "window": "1m"}
   },
+  "audit_logs": {"enabled": true},
   "clients": [
     {
       "id": "caller-service",
@@ -664,7 +696,7 @@ provider, _ := client.New().
 - Prefer one `client_id` per service.
 - Always validate `iss`, `aud`, `exp`, `nbf`, signature, `token_use`, and required scopes.
 - Do not reuse a token minted for `billing-api` against another audience.
-- For production, add rate limiting and audit logs around `/oauth/token`.
+- Keep the built-in rate limiting and audit logs enabled around `/oauth/token` and `/readyz`.
 - For stronger service identity, add mTLS or SPIFFE/SPIRE alongside JWT scopes.
 
 # Tests
@@ -685,6 +717,7 @@ orders-service
 orionis-auth
   /oauth/token
   /.well-known/jwks.json
+  /readyz
        |
        | JWT access token
        v

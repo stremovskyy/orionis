@@ -24,13 +24,14 @@ POST /oauth/token
 GET  /.well-known/jwks.json
 GET  /.well-known/openid-configuration
 GET  /healthz
+GET  /readyz
 ```
 
 ## Supported package surfaces
 
 ```bash
-docker pull stremovskyy/orionis:latest
-docker pull ghcr.io/stremovskyy/orionis:latest
+docker pull stremovskyy/orionis:0.2.0
+docker pull ghcr.io/stremovskyy/orionis:0.2.0
 go get github.com/stremovskyy/orionis
 ```
 

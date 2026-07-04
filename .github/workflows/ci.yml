@@ -42,7 +42,10 @@ jobs:
         run: govulncheck ./...
 
       - name: Build auth image
-        run: docker build --build-arg TARGET=./cmd/orionis-auth -t orionis-auth:ci .
+        run: docker build --build-arg TARGET=./cmd/orionis-auth -t orionis-auth:ci -t stremovskyy/orionis:ci .
+
+      - name: Smoke auth image
+        run: scripts/smoke-release-image.sh stremovskyy/orionis:ci
 
       - name: Build Compose stack
         run: docker compose build

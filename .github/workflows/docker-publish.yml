@@ -53,6 +53,9 @@ jobs:
       - name: Build auth image locally
         run: docker build --build-arg TARGET=./cmd/orionis-auth -t "${DOCKERHUB_IMAGE}:ci" .
 
+      - name: Smoke auth image locally
+        run: scripts/smoke-release-image.sh "${DOCKERHUB_IMAGE}:ci"
+
       - name: Check Docker Hub configuration
         if: startsWith(github.ref, 'refs/tags/v')
         env:

@@ -11,6 +11,7 @@
 
 - Keep private signing keys readable only by the Orionis auth-server process.
 - In production, inject the Ed25519 PKCS8 PEM signing key through `private_key_pem_env`.
+- Use `keys` plus `active_kid` for rotation: publish old and new public keys together, then switch `active_kid` for new tokens.
 - Use `/app/var` only for local/demo file-backed deployments that intentionally generate a key on first start.
 - Back up production signing keys through your normal secret backup path.
 - Publish old and new public keys together during key rotation until every token signed by the old key has expired.
@@ -24,7 +25,7 @@
 
 ## Runtime hardening
 
-- Put rate limiting and audit logging around `/oauth/token`.
+- Keep built-in rate limiting and audit logging enabled around `/oauth/token` and `/readyz`.
 - Run behind TLS in shared environments.
 - Keep `log_level` at `info`, `warn`, or `error` outside local debugging.
-- Avoid logging tokens, plaintext client secrets, or private key paths.
+- Avoid logging tokens, plaintext client secrets, authorization headers, request bodies, or private key paths.

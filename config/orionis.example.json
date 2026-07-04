@@ -3,10 +3,22 @@
   "log_level": "info",
   "issuer": "http://localhost:8080",
   "access_token_ttl": "15m",
-  "key": {
-    "kid": "orionis-local-ed25519-1",
-    "private_key_path": "./var/orionis-ed25519.pem"
+  "active_kid": "orionis-local-ed25519-2",
+  "keys": [
+    {
+      "kid": "orionis-local-ed25519-1",
+      "private_key_path": "./var/orionis-ed25519-1.pem"
+    },
+    {
+      "kid": "orionis-local-ed25519-2",
+      "private_key_path": "./var/orionis-ed25519-2.pem"
+    }
+  ],
+  "rate_limits": {
+    "token": {"enabled": true, "limit": 60, "window": "1m"},
+    "readyz": {"enabled": true, "limit": 300, "window": "1m"}
   },
+  "audit_logs": {"enabled": true},
   "clients": [
     {
       "id": "orders-service",

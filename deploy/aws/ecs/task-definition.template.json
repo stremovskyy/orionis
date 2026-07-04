@@ -13,7 +13,7 @@
   "containerDefinitions": [
     {
       "name": "orionis-auth",
-      "image": "stremovskyy/orionis:0.1.3",
+      "image": "stremovskyy/orionis:0.2.0",
       "essential": true,
       "entryPoint": ["/bin/sh", "-c"],
       "command": [
@@ -40,6 +40,10 @@
         {
           "name": "ORIONIS_SIGNING_KEY_PEM",
           "valueFrom": "${ORIONIS_SIGNING_KEY_SECRET_ARN}"
+        },
+        {
+          "name": "ORIONIS_SIGNING_KEY_PEM_OLD",
+          "valueFrom": "${ORIONIS_OLD_SIGNING_KEY_SECRET_ARN}"
         }
       ],
       "healthCheck": {

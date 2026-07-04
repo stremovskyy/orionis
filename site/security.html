@@ -31,6 +31,7 @@
       <h2>Keys</h2>
       <ul>
         <li>Inject production signing keys through `private_key_pem_env`.</li>
+        <li>Use `keys` plus `active_kid` for overlapping key rotation.</li>
         <li>Use `/app/var` only for local file-backed demo keys.</li>
         <li>Keep private signing keys readable only by the auth server.</li>
         <li>Publish old and new public keys together during rotation.</li>
@@ -41,6 +42,7 @@
         <li>Use short access token TTLs, usually 5 to 15 minutes.</li>
         <li>Validate issuer, audience, time claims, signature, token use, and scopes.</li>
         <li>Do not reuse tokens across audiences.</li>
+        <li>Keep rate limiting and audit logs enabled for `/oauth/token` and `/readyz`.</li>
       </ul>
     </main>
   </body>

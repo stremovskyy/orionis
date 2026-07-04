@@ -37,6 +37,13 @@ docker compose down --remove-orphans
 
 Do not use `docker compose down -v` unless you intentionally want to delete the generated local signing key stored in the `orionis-var` volume.
 
+## Check health and readiness
+
+```bash
+curl -fsS http://localhost:8080/healthz
+curl -fsS http://localhost:8080/readyz
+```
+
 ## Request a token manually
 
 ```bash

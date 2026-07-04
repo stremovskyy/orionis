@@ -68,6 +68,7 @@ Ed25519 gives compact keys/signatures and fast signing/verification while avoidi
 ## Key rotation model
 
 The server supports multiple signers. Publish all public keys through JWKS and choose one active signer for new tokens. Keep old public keys in JWKS until every token signed by the old key has expired.
+The `cmd/orionis-auth` JSON config exposes this through `keys` and `active_kid`, while the legacy single-key `key` field remains supported for simple deployments.
 
 ```text
 T0: JWKS = [old], active = old
