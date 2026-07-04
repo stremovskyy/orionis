@@ -59,7 +59,6 @@ orionis/
   docs/architecture.md           Architecture notes
   docs/wiki/                     GitHub Wiki source pages
   site/                          Static GitHub Pages site
-  scripts/publish-wiki.sh        Wiki publication helper
 ```
 
 ## Design goals
