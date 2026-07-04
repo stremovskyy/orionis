@@ -5,7 +5,7 @@
   "access_token_ttl": "15m",
   "key": {
     "kid": "orionis-ecs-ed25519-1",
-    "private_key_path": "/app/var/orionis-ed25519.pem"
+    "private_key_pem_env": "ORIONIS_SIGNING_KEY_PEM"
   },
   "clients": [
     {

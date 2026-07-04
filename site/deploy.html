@@ -42,7 +42,13 @@ docker run --rm -d \
 
       <h2>AWS ECS Fargate</h2>
       <p>Use the checked-in ECS templates when you want a managed AWS deployment from the public image.</p>
-      <pre><code>aws secretsmanager create-secret \
+      <pre><code>openssl genpkey -algorithm ED25519 > /tmp/orionis-ed25519.pem
+
+aws secretsmanager create-secret \
+  --name orionis/signing-key \
+  --secret-string file:///tmp/orionis-ed25519.pem
+
+aws secretsmanager create-secret \
   --name orionis/config \
   --secret-string file://deploy/aws/ecs/orionis-config.example.json
 

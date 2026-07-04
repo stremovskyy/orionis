@@ -180,33 +180,35 @@ curl -fsS http://localhost:8080/healthz
 Pin a released image in deployed environments:
 
 ```bash
-ORIONIS_IMAGE_TAG=0.1.2 docker compose -f docker-compose.release.yml up -d
+ORIONIS_IMAGE_TAG=0.1.3 docker compose -f docker-compose.release.yml up -d
 ```
 
 The published image expects its config at `/app/config/orionis.json` by default.
-Mount the config read-only, mount `/app/var` as persistent storage for the Ed25519 signing key,
-replace demo secrets before sharing an environment, and prefer `secret_sha256_hex` over plaintext
-secrets in deployed configs.
+Mount the config read-only, replace demo secrets before sharing an environment, and prefer
+`secret_sha256_hex` over plaintext secrets in deployed configs. Local Docker examples use
+`/app/var` for a generated demo signing key; ECS/Fargate should load the signing key from
+an injected secret environment variable instead.
 
 The GitHub Container Registry image uses the same tags as Docker Hub:
 
 ```bash
-docker pull ghcr.io/stremovskyy/orionis:0.1.2
+docker pull ghcr.io/stremovskyy/orionis:0.1.3
 
 docker run --rm -d \
   --name orionis-auth \
   -p 8080:8080 \
   -v "$PWD/config:/app/config:ro" \
   -v orionis-var:/app/var \
-  ghcr.io/stremovskyy/orionis:0.1.2
+  ghcr.io/stremovskyy/orionis:0.1.3
 ```
 
 ## Deploy on AWS ECS Fargate
 
 Use the templates in [`deploy/aws/ecs`](deploy/aws/ecs) to run the published image on ECS Fargate.
-The default task definition uses `stremovskyy/orionis:0.1.2`, `awsvpc` networking, CloudWatch logs,
-a `/healthz` container health check, AWS Secrets Manager for `ORIONIS_CONFIG_JSON`, and EFS mounted
-at `/app/var` for the Ed25519 signing key.
+The default task definition uses `stremovskyy/orionis:0.1.3`, `awsvpc` networking, CloudWatch logs,
+a `/healthz` container health check, AWS Secrets Manager for `ORIONIS_CONFIG_JSON`, and AWS Secrets
+Manager secret injection for `ORIONIS_SIGNING_KEY_PEM`. It does not mount EFS or write the signing
+key to `/app/var`.
 
 Start from the example config and task definition:
 
@@ -218,9 +220,19 @@ aws secretsmanager create-secret \
   --secret-string file:///tmp/orionis-config.json
 ```
 
-Then follow [`deploy/aws/ecs/README.md`](deploy/aws/ecs/README.md) to create the EFS access point,
-render the task definition with your AWS resource placeholders, register it, and deploy an ECS service.
-Use EFS access point POSIX owner `100:101`, matching the `orionis` user inside the image.
+Create the signing-key secret as PKCS8 PEM:
+
+```bash
+openssl genpkey -algorithm ED25519 > /tmp/orionis-ed25519.pem
+
+aws secretsmanager create-secret \
+  --name orionis/signing-key \
+  --secret-string file:///tmp/orionis-ed25519.pem
+```
+
+Then follow [`deploy/aws/ecs/README.md`](deploy/aws/ecs/README.md) to grant the ECS task execution
+role access to both secrets, render the task definition with your AWS resource placeholders, register
+it, and deploy an ECS service.
 
 Build the auth server image:
 
@@ -517,7 +529,7 @@ Add the caller service to the auth server config:
   "access_token_ttl": "15m",
   "key": {
     "kid": "orionis-dev-ed25519-1",
-    "private_key_path": "/app/var/orionis-ed25519.pem"
+    "private_key_pem_env": "ORIONIS_SIGNING_KEY_PEM"
   },
   "clients": [
     {

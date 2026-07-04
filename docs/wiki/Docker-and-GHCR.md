@@ -41,8 +41,8 @@ docker run --rm -d \
 Prefer a pinned tag for shared environments:
 
 ```bash
-docker pull stremovskyy/orionis:0.1.2
-docker pull ghcr.io/stremovskyy/orionis:0.1.2
+docker pull stremovskyy/orionis:0.1.3
+docker pull ghcr.io/stremovskyy/orionis:0.1.3
 ```
 
 ## AWS ECS Fargate
@@ -51,14 +51,15 @@ Use `deploy/aws/ecs/` from the repository to deploy the public image on ECS Farg
 
 The task definition template uses:
 
-- `stremovskyy/orionis:0.1.2`
+- `stremovskyy/orionis:0.1.3`
 - `awsvpc` networking
 - AWS Secrets Manager for `ORIONIS_CONFIG_JSON`
-- EFS mounted at `/app/var`
+- AWS Secrets Manager secret injection for `ORIONIS_SIGNING_KEY_PEM`
 - `/healthz` as the ECS container health check
 - CloudWatch Logs through `awslogs`
 
-The container runs as `uid=100` and `gid=101`, so create the EFS access point with POSIX owner `100:101`.
+The ECS/Fargate template injects the signing key as an environment secret and does not mount EFS or
+write the key to `/app/var`; local Docker examples keep using `/app/var` only for generated demo keys.
 
 ## Health check
 

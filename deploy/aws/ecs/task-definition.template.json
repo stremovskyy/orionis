@@ -10,23 +10,10 @@
   },
   "executionRoleArn": "${ORIONIS_EXECUTION_ROLE_ARN}",
   "taskRoleArn": "${ORIONIS_TASK_ROLE_ARN}",
-  "volumes": [
-    {
-      "name": "orionis-var",
-      "efsVolumeConfiguration": {
-        "fileSystemId": "${ORIONIS_EFS_FILE_SYSTEM_ID}",
-        "transitEncryption": "ENABLED",
-        "authorizationConfig": {
-          "accessPointId": "${ORIONIS_EFS_ACCESS_POINT_ID}",
-          "iam": "ENABLED"
-        }
-      }
-    }
-  ],
   "containerDefinitions": [
     {
       "name": "orionis-auth",
-      "image": "stremovskyy/orionis:0.1.2",
+      "image": "stremovskyy/orionis:0.1.3",
       "essential": true,
       "entryPoint": ["/bin/sh", "-c"],
       "command": [
@@ -49,13 +36,10 @@
         {
           "name": "ORIONIS_CONFIG_JSON",
           "valueFrom": "${ORIONIS_CONFIG_SECRET_ARN}"
-        }
-      ],
-      "mountPoints": [
+        },
         {
-          "sourceVolume": "orionis-var",
-          "containerPath": "/app/var",
-          "readOnly": false
+          "name": "ORIONIS_SIGNING_KEY_PEM",
+          "valueFrom": "${ORIONIS_SIGNING_KEY_SECRET_ARN}"
         }
       ],
       "healthCheck": {

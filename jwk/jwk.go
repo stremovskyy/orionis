@@ -590,18 +590,7 @@ func LoadOrCreateEd25519Signer(path string, kid string) (*Ed25519Signer, error) 
 			return nil, fmt.Errorf("decode pem %s: empty pem", path)
 		}
 
-		key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
-		if err != nil {
-			return nil, fmt.Errorf("parse pkcs8 private key: %w", err)
-		}
-
-		priv, ok := key.(ed25519.PrivateKey)
-
-		if !ok {
-			return nil, fmt.Errorf("private key at %s is %T, expected ed25519.PrivateKey", path, key)
-		}
-
-		return &Ed25519Signer{Kid: strings.TrimSpace(kid), PrivateKey: priv}, nil
+		return ed25519SignerFromPKCS8(block.Bytes, kid, "at "+path)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
@@ -627,6 +616,38 @@ func LoadOrCreateEd25519Signer(path string, kid string) (*Ed25519Signer, error) 
 	}
 
 	return signer, nil
+}
+
+func LoadEd25519SignerPEM(raw []byte, kid string) (*Ed25519Signer, error) {
+	if strings.TrimSpace(kid) == "" {
+		kid = "orionis-ed25519-1"
+	}
+
+	block, _ := pem.Decode(raw)
+	if block == nil {
+		return nil, errors.New("decode pem: empty pem")
+	}
+
+	return ed25519SignerFromPKCS8(block.Bytes, kid, "")
+}
+
+func ed25519SignerFromPKCS8(der []byte, kid string, location string) (*Ed25519Signer, error) {
+	key, err := x509.ParsePKCS8PrivateKey(der)
+	if err != nil {
+		return nil, fmt.Errorf("parse pkcs8 private key: %w", err)
+	}
+
+	priv, ok := key.(ed25519.PrivateKey)
+
+	if !ok {
+		if strings.TrimSpace(location) != "" {
+			return nil, fmt.Errorf("private key %s is %T, expected ed25519.PrivateKey", location, key)
+		}
+
+		return nil, fmt.Errorf("private key is %T, expected ed25519.PrivateKey", key)
+	}
+
+	return &Ed25519Signer{Kid: strings.TrimSpace(kid), PrivateKey: priv}, nil
 }
 
 func defaultRemoteHTTPClient() *http.Client {

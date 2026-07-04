@@ -3,6 +3,11 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -55,6 +60,7 @@ func TestServeHTTPServerStopsOnContextCancel(t *testing.T) {
 	}()
 
 	client := &http.Client{Timeout: time.Second}
+
 	if _, err := client.Get("http://" + listener.Addr().String()); err != nil {
 		t.Fatal(err)
 	}
@@ -130,6 +136,80 @@ func TestLoadConfigRejectsMissingClients(t *testing.T) {
 
 	if _, err := loadConfig(path); err == nil {
 		t.Fatalf("expected config without clients to be rejected")
+	}
+}
+
+func TestLoadSigningKeyKeepsFileModeCompatibility(t *testing.T) {
+	dir := t.TempDir()
+	keyPath := filepath.Join(dir, "orionis-ed25519.pem")
+
+	signer, err := loadSigningKey(keyConfig{KID: "file-kid", PrivateKeyPath: keyPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if signer.KeyID() != "file-kid" {
+		t.Fatalf("unexpected kid: %q", signer.KeyID())
+	}
+
+	if _, err := os.Stat(keyPath); err != nil {
+		t.Fatalf("expected file mode to create key at %s: %v", keyPath, err)
+	}
+}
+
+func TestLoadSigningKeyReadsPEMFromEnvironment(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ORIONIS_SIGNING_KEY_PEM", string(testSigningKeyPEM(t)))
+
+	signer, err := loadSigningKey(keyConfig{KID: "env-kid", PrivateKeyPEMEnv: "ORIONIS_SIGNING_KEY_PEM"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if signer.KeyID() != "env-kid" {
+		t.Fatalf("unexpected kid: %q", signer.KeyID())
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "orionis-ed25519.pem")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected env mode not to create a key file, stat err=%v", err)
+	}
+}
+
+func TestLoadSigningKeyRejectsMissingPEMEnvironmentVariable(t *testing.T) {
+	_, err := loadSigningKey(keyConfig{PrivateKeyPEMEnv: "ORIONIS_MISSING_SIGNING_KEY_PEM"})
+	if err == nil {
+		t.Fatalf("expected missing environment variable to be rejected")
+	}
+
+	if !strings.Contains(err.Error(), "ORIONIS_MISSING_SIGNING_KEY_PEM") {
+		t.Fatalf("expected environment variable name in error, got %v", err)
+	}
+}
+
+func TestLoadSigningKeyRejectsPathAndPEMEnvironmentConflict(t *testing.T) {
+	_, err := loadSigningKey(keyConfig{
+		PrivateKeyPath:   "/app/var/key.pem",
+		PrivateKeyPEMEnv: "ORIONIS_SIGNING_KEY_PEM",
+	})
+	if err == nil {
+		t.Fatalf("expected path and env conflict to be rejected")
+	}
+
+	if !strings.Contains(err.Error(), "private_key_path") || !strings.Contains(err.Error(), "private_key_pem_env") {
+		t.Fatalf("expected path/env error, got %v", err)
+	}
+}
+
+func TestLoadSigningKeyRejectsInvalidEnvironmentPEM(t *testing.T) {
+	t.Setenv("ORIONIS_SIGNING_KEY_PEM", "not pem")
+
+	_, err := loadSigningKey(keyConfig{PrivateKeyPEMEnv: "ORIONIS_SIGNING_KEY_PEM"})
+	if err == nil {
+		t.Fatalf("expected invalid pem to be rejected")
+	}
+
+	if !strings.Contains(err.Error(), "decode pem") {
+		t.Fatalf("expected decode pem error, got %v", err)
 	}
 }
 
@@ -221,4 +301,20 @@ func TestNewGinEngineEmitsRequestLogsForDebugLevel(t *testing.T) {
 	if !strings.Contains(logs.String(), "[GIN]") {
 		t.Fatalf("expected debug level to emit gin request logs, got %q", logs.String())
 	}
+}
+
+func testSigningKeyPEM(t *testing.T) []byte {
+	t.Helper()
+
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	der, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
 }

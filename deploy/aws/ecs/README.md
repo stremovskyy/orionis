@@ -5,13 +5,13 @@ This directory contains templates for running the published Orionis auth-server 
 The default image is Docker Hub:
 
 ```text
-stremovskyy/orionis:0.1.2
+stremovskyy/orionis:0.1.3
 ```
 
 You can replace it with the equivalent GHCR image:
 
 ```text
-ghcr.io/stremovskyy/orionis:0.1.2
+ghcr.io/stremovskyy/orionis:0.1.3
 ```
 
 ## Runtime model
@@ -19,24 +19,34 @@ ghcr.io/stremovskyy/orionis:0.1.2
 - Fargate task with `awsvpc` networking.
 - Public container image, so no `repositoryCredentials` are required.
 - `ORIONIS_CONFIG_JSON` comes from AWS Secrets Manager.
+- `ORIONIS_SIGNING_KEY_PEM` comes from AWS Secrets Manager.
 - The task writes that secret to `/tmp/orionis.json` and starts `/usr/local/bin/orionis -config /tmp/orionis.json`.
-- EFS is mounted at `/app/var` so the Ed25519 signing key persists across task replacements.
-- The image runs as `uid=100(orionis)` and `gid=101(orionis)`, so the EFS access point should use POSIX owner `100:101`.
+- The Orionis process reads the Ed25519 signing key from `ORIONIS_SIGNING_KEY_PEM`; it does not use an AWS SDK or write the key to `/app/var`.
 
 ## Required AWS resources
 
 - ECS cluster and service.
-- Task execution role with permissions for CloudWatch Logs and `secretsmanager:GetSecretValue` on the Orionis config secret.
-- Task role with EFS access point permissions when IAM authorization is enabled.
+- Task execution role with permissions for CloudWatch Logs and `secretsmanager:GetSecretValue` on the Orionis config and signing-key secrets.
 - CloudWatch log group.
 - Secrets Manager secret containing the full Orionis JSON config.
-- EFS file system and access point.
+- Secrets Manager secret containing the Ed25519 PKCS8 PEM signing key.
 - Security group and private subnets for the task.
 - Optional load balancer or service discovery target for port `8080`.
 
 ## Prepare config
 
-Copy `orionis-config.example.json`, replace all placeholders, and store the full JSON as one Secrets Manager secret:
+Create the Ed25519 signing key as PKCS8 PEM and store it in Secrets Manager:
+
+```bash
+openssl genpkey -algorithm ED25519 > /tmp/orionis-ed25519.pem
+
+aws secretsmanager create-secret \
+  --name orionis/signing-key \
+  --secret-string file:///tmp/orionis-ed25519.pem
+```
+
+Copy `orionis-config.example.json`, replace placeholders, and store the full JSON as the config secret.
+The example config uses `key.private_key_pem_env: "ORIONIS_SIGNING_KEY_PEM"`:
 
 ```bash
 aws secretsmanager create-secret \
@@ -44,20 +54,28 @@ aws secretsmanager create-secret \
   --secret-string file://deploy/aws/ecs/orionis-config.example.json
 ```
 
-If you update that secret later, force a new ECS deployment so new tasks receive the latest value.
+If you update either secret later, force a new ECS deployment so new tasks receive the latest value.
 
-## Create an EFS access point
+## IAM permissions
 
-Create the access point with the same POSIX identity as the container user:
+Grant the task execution role access to both the config secret and the signing-key secret:
 
 ```bash
-aws efs create-access-point \
-  --file-system-id "$ORIONIS_EFS_FILE_SYSTEM_ID" \
-  --posix-user Uid=100,Gid=101 \
-  --root-directory "Path=/orionis,CreationInfo={OwnerUid=100,OwnerGid=101,Permissions=750}"
+aws iam put-role-policy \
+  --role-name "$ORIONIS_EXECUTION_ROLE_NAME" \
+  --policy-name OrionisRuntimeSecretsRead \
+  --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Action": "secretsmanager:GetSecretValue",
+      "Resource": [
+        "'"$ORIONIS_CONFIG_SECRET_ARN"'",
+        "'"$ORIONIS_SIGNING_KEY_SECRET_ARN"'"
+      ]
+    }]
+  }'
 ```
-
-Use the returned access point id as `ORIONIS_EFS_ACCESS_POINT_ID`.
 
 ## Render and register the task definition
 
@@ -66,10 +84,10 @@ Set placeholders for your account, region, and infrastructure:
 ```bash
 export AWS_REGION=us-east-1
 export ORIONIS_EXECUTION_ROLE_ARN="<TASK_EXECUTION_ROLE_ARN>"
+export ORIONIS_EXECUTION_ROLE_NAME="<TASK_EXECUTION_ROLE_NAME>"
 export ORIONIS_TASK_ROLE_ARN="<TASK_ROLE_ARN>"
 export ORIONIS_CONFIG_SECRET_ARN="<SECRETS_MANAGER_CONFIG_SECRET_ARN>"
-export ORIONIS_EFS_FILE_SYSTEM_ID="<EFS_FILE_SYSTEM_ID>"
-export ORIONIS_EFS_ACCESS_POINT_ID="<EFS_ACCESS_POINT_ID>"
+export ORIONIS_SIGNING_KEY_SECRET_ARN="<SECRETS_MANAGER_SIGNING_KEY_SECRET_ARN>"
 export ORIONIS_LOG_GROUP="/ecs/orionis-auth"
 export ORIONIS_ECS_CLUSTER="<ECS_CLUSTER_NAME>"
 export ORIONIS_ECS_SERVICE="orionis-auth"

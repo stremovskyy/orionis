@@ -30,7 +30,8 @@
 
       <h2>Keys</h2>
       <ul>
-        <li>Persist `/app/var` for container deployments.</li>
+        <li>Inject production signing keys through `private_key_pem_env`.</li>
+        <li>Use `/app/var` only for local file-backed demo keys.</li>
         <li>Keep private signing keys readable only by the auth server.</li>
         <li>Publish old and new public keys together during rotation.</li>
       </ul>

@@ -64,8 +64,9 @@ type config struct {
 }
 
 type keyConfig struct {
-	KID            string `json:"kid"`
-	PrivateKeyPath string `json:"private_key_path"`
+	KID              string `json:"kid"`
+	PrivateKeyPath   string `json:"private_key_path,omitempty"`
+	PrivateKeyPEMEnv string `json:"private_key_pem_env,omitempty"`
 }
 
 func main() {
@@ -92,10 +93,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	signer, err := jwk.Ed25519().
-		Path(expandPath(cfg.Key.PrivateKeyPath)).
-		KID(cfg.Key.KID).
-		Build()
+	signer, err := loadSigningKey(cfg.Key)
 	if err != nil {
 		slog.Error("load signing key", "error", err)
 		os.Exit(1)
@@ -160,6 +158,30 @@ func loadConfig(path string) (config, error) {
 	return cfg, nil
 }
 
+func loadSigningKey(cfg keyConfig) (*jwk.Ed25519Signer, error) {
+	privateKeyPath := strings.TrimSpace(cfg.PrivateKeyPath)
+	privateKeyPEMEnv := strings.TrimSpace(cfg.PrivateKeyPEMEnv)
+
+	if privateKeyPath != "" && privateKeyPEMEnv != "" {
+		return nil, errors.New("key.private_key_path and key.private_key_pem_env are mutually exclusive")
+	}
+
+	if privateKeyPEMEnv == "" {
+		return jwk.Ed25519().
+			Path(expandPath(privateKeyPath)).
+			KID(cfg.KID).
+			Build()
+	}
+
+	raw := os.Getenv(privateKeyPEMEnv)
+
+	if strings.TrimSpace(raw) == "" {
+		return nil, fmt.Errorf("key.private_key_pem_env %q is empty or not set", privateKeyPEMEnv)
+	}
+
+	return jwk.LoadEd25519SignerPEM([]byte(raw), cfg.KID)
+}
+
 func parseDurationDefault(value string, fallback time.Duration) (time.Duration, error) {
 	if strings.TrimSpace(value) == "" {
 		return fallback, nil
@@ -205,6 +227,7 @@ func newGinEngine(level slog.Level) *gin.Engine {
 
 func parseLogLevel(logLevel string) (slog.Level, error) {
 	logLevel = strings.TrimSpace(strings.ToLower(logLevel))
+
 	if logLevel == "" {
 		return slog.LevelInfo, nil
 	}
@@ -257,7 +280,12 @@ func newHTTPServer(addr string, handler http.Handler) *http.Server {
 	}
 }
 
-func serveHTTPServer(ctx context.Context, server *http.Server, shutdownTimeout time.Duration, serve func() error) error {
+func serveHTTPServer(
+	ctx context.Context,
+	server *http.Server,
+	shutdownTimeout time.Duration,
+	serve func() error,
+) error {
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- serve()
@@ -273,6 +301,7 @@ func serveHTTPServer(ctx context.Context, server *http.Server, shutdownTimeout t
 		}
 
 		err := <-errCh
+
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return err
 		}
