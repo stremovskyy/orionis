@@ -8,6 +8,7 @@ tmpdir="$(mktemp -d)"
 config_dir="$tmpdir/config"
 var_dir="$tmpdir/var"
 mkdir -p "$config_dir" "$var_dir"
+chmod 0777 "$var_dir"
 
 cleanup() {
   docker rm -f "$container" >/dev/null 2>&1 || true
