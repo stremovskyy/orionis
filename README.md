@@ -1,5 +1,15 @@
 # Orionis
 
+[![CI](https://github.com/stremovskyy/orionis/actions/workflows/ci.yml/badge.svg)](https://github.com/stremovskyy/orionis/actions/workflows/ci.yml)
+[![Docker Publish](https://github.com/stremovskyy/orionis/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/stremovskyy/orionis/actions/workflows/docker-publish.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/stremovskyy/orionis?sort=semver)](https://github.com/stremovskyy/orionis/releases)
+[![Go Reference](https://pkg.go.dev/badge/github.com/stremovskyy/orionis.svg)](https://pkg.go.dev/github.com/stremovskyy/orionis)
+[![Go Report Card](https://goreportcard.com/badge/github.com/stremovskyy/orionis)](https://goreportcard.com/report/github.com/stremovskyy/orionis)
+[![Docker Image Version](https://img.shields.io/docker/v/stremovskyy/orionis?sort=semver)](https://hub.docker.com/r/stremovskyy/orionis)
+[![Docker Pulls](https://img.shields.io/docker/pulls/stremovskyy/orionis)](https://hub.docker.com/r/stremovskyy/orionis)
+[![Docker Image Size](https://img.shields.io/docker/image-size/stremovskyy/orionis/latest)](https://hub.docker.com/r/stremovskyy/orionis)
+[![License](https://img.shields.io/github/license/stremovskyy/orionis)](LICENSE)
+
 **Orionis** is a compact Go toolkit and GIN authorization server for service-to-service OAuth 2.0 `client_credentials`, signed JWT access tokens, JWKS validation, token caching, and drop-in GIN middleware.
 
 The API is **chain-first**:
@@ -126,6 +136,45 @@ ORIONIS_SCOPE          default: billing.invoice.create
 ```
 
 ## Run with Docker
+
+Pull the published auth server image from Docker Hub:
+
+```bash
+docker pull stremovskyy/orionis:latest
+```
+
+Run Orionis from the published image:
+
+```bash
+test -f config/orionis.json || cp config/orionis.example.json config/orionis.json
+
+docker run --rm -d \
+  --name orionis-auth \
+  -p 8080:8080 \
+  -v "$PWD/config:/app/config:ro" \
+  -v orionis-var:/app/var \
+  stremovskyy/orionis:latest
+```
+
+Or use the release Compose file:
+
+```bash
+test -f config/orionis.json || cp config/orionis.example.json config/orionis.json
+
+ORIONIS_IMAGE_TAG=latest docker compose -f docker-compose.release.yml up -d
+curl -fsS http://localhost:8080/healthz
+```
+
+Pin a released image in deployed environments:
+
+```bash
+ORIONIS_IMAGE_TAG=0.1.1 docker compose -f docker-compose.release.yml up -d
+```
+
+The published image expects its config at `/app/config/orionis.json` by default.
+Mount the config read-only, mount `/app/var` as persistent storage for the Ed25519 signing key,
+replace demo secrets before sharing an environment, and prefer `secret_sha256_hex` over plaintext
+secrets in deployed configs.
 
 Build the auth server image:
 

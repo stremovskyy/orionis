@@ -1,0 +1,18 @@
+services:
+  orionis-auth:
+    image: stremovskyy/orionis:${ORIONIS_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "${ORIONIS_AUTH_PORT:-8080}:8080"
+    volumes:
+      - ./config:/app/config:ro
+      - orionis-var:/app/var
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+volumes:
+  orionis-var:
