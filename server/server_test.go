@@ -159,12 +159,18 @@ func TestClientCredentialsAllowConcreteScopesByAllowedWildcard(t *testing.T) {
 	}
 }
 
-func TestClientCredentialsAllowWildcardScopeRequest(t *testing.T) {
-	auth, signer := newPolicyTestServer(t, "target.webhooks.**", "target.products.*")
+func TestClientCredentialsWildcardScopeRequestExpandsConcreteAllowedScopes(t *testing.T) {
+	auth, signer := newPolicyTestServer(
+		t,
+		"target.webhooks.read",
+		"target.webhooks.resend",
+		"target.webhooks.admin.delete",
+		"target.products.read",
+	)
 	form := url.Values{}
 	form.Set("grant_type", "client_credentials")
 	form.Set("audience", "billing-api")
-	form.Set("scope", "target.webhooks.* target.products.*")
+	form.Set("scope", "target.webhooks.*")
 	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.SetBasicAuth("orders-service", "secret")
@@ -181,8 +187,12 @@ func TestClientCredentialsAllowWildcardScopeRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if tr.Scope != "target.products.* target.webhooks.*" {
+	if tr.Scope != "target.webhooks.read target.webhooks.resend" {
 		t.Fatalf("unexpected response scope: %q", tr.Scope)
+	}
+
+	if strings.Contains(tr.Scope, "*") {
+		t.Fatalf("token response must not include wildcard scope: %q", tr.Scope)
 	}
 
 	provider, err := signer.StaticProvider()
@@ -199,8 +209,77 @@ func TestClientCredentialsAllowWildcardScopeRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if verified.Claims.Scope != "target.products.* target.webhooks.*" {
+	if verified.Claims.Scope != "target.webhooks.read target.webhooks.resend" {
 		t.Fatalf("unexpected jwt scope: %q", verified.Claims.Scope)
+	}
+
+	if strings.Contains(verified.Claims.Scope, "*") {
+		t.Fatalf("jwt scope must not include wildcard: %q", verified.Claims.Scope)
+	}
+}
+
+func TestClientCredentialsRecursiveWildcardScopeRequestExpandsDeepConcreteAllowedScopes(t *testing.T) {
+	auth, _ := newPolicyTestServer(
+		t,
+		"target.webhooks.read",
+		"target.webhooks.admin.delete",
+		"target.products.read",
+	)
+	form := url.Values{}
+	form.Set("grant_type", "client_credentials")
+	form.Set("audience", "billing-api")
+	form.Set("scope", "target.webhooks.**")
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("orders-service", "secret")
+	res := httptest.NewRecorder()
+	auth.TokenHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+
+	var tr orionis.TokenResponse
+
+	if err := json.Unmarshal(res.Body.Bytes(), &tr); err != nil {
+		t.Fatal(err)
+	}
+
+	if tr.Scope != "target.webhooks.admin.delete target.webhooks.read" {
+		t.Fatalf("unexpected response scope: %q", tr.Scope)
+	}
+}
+
+func TestClientCredentialsMultipleWildcardScopeRequestsExpandUnion(t *testing.T) {
+	auth, _ := newPolicyTestServer(
+		t,
+		"target.webhooks.read",
+		"target.webhooks.resend",
+		"target.products.read",
+		"target.products.write",
+	)
+	form := url.Values{}
+	form.Set("grant_type", "client_credentials")
+	form.Set("audience", "billing-api")
+	form.Set("scope", "target.webhooks.* target.products.* target.webhooks.read")
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("orders-service", "secret")
+	res := httptest.NewRecorder()
+	auth.TokenHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+
+	var tr orionis.TokenResponse
+
+	if err := json.Unmarshal(res.Body.Bytes(), &tr); err != nil {
+		t.Fatal(err)
+	}
+
+	if tr.Scope != "target.products.read target.products.write target.webhooks.read target.webhooks.resend" {
+		t.Fatalf("unexpected response scope: %q", tr.Scope)
 	}
 }
 
@@ -235,8 +314,6 @@ func TestClientCredentialsRecursiveWildcardAllowedScopeMatchesDeepScopes(t *test
 	for _, scope := range []string{
 		"billing.invoice.read",
 		"billing.invoice.admin.delete",
-		"billing.invoice.*",
-		"billing.invoice.**",
 	} {
 		t.Run(scope, func(t *testing.T) {
 			form := url.Values{}
@@ -262,6 +339,23 @@ func TestClientCredentialsRejectsUnallowedWildcardScopeRequest(t *testing.T) {
 	form.Set("grant_type", "client_credentials")
 	form.Set("audience", "billing-api")
 	form.Set("scope", "target.webhooks.* target.products.*")
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("orders-service", "secret")
+	res := httptest.NewRecorder()
+	auth.TokenHTTP(res, req)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", res.Code, res.Body.String())
+	}
+}
+
+func TestClientCredentialsRejectsWildcardRequestWithoutConcreteMatches(t *testing.T) {
+	auth, _ := newPolicyTestServer(t, "target.webhooks.**")
+	form := url.Values{}
+	form.Set("grant_type", "client_credentials")
+	form.Set("audience", "billing-api")
+	form.Set("scope", "target.webhooks.*")
 	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.SetBasicAuth("orders-service", "secret")

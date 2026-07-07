@@ -47,19 +47,26 @@ Use generic caller and audience names. Store plaintext secrets outside Git.
   "id": "caller-service",
   "secret_sha256_hex": ["<CLIENT_SECRET_SHA>"],
   "allowed_audiences": ["target-api"],
-  "allowed_scopes": ["target.webhooks.**", "target.products.*"],
+  "allowed_scopes": [
+    "target.webhooks.read",
+    "target.webhooks.resend",
+    "target.webhooks.admin.delete",
+    "target.products.read",
+    "target.products.write"
+  ],
   "default_scopes": ["target.webhooks.read"]
 }
 ```
 
-`allowed_scopes` may use suffix wildcards.
-`target.products.*` matches one segment such as `target.products.read`; `target.webhooks.**` also matches deeper scopes such as `target.webhooks.admin.delete`.
-Clients may request multiple concrete or wildcard scopes as a space-separated value, for example `target.webhooks.* target.products.*`, and receiving services should check concrete route-level scopes.
+`allowed_scopes` is the registry of concrete permissions that can be issued.
+Clients may request multiple concrete scopes, or use wildcard selectors as a space-separated value.
+For example, `target.webhooks.* target.products.*` expands to matching one-segment concrete scopes, and receiving services should check concrete route-level scopes.
+Wildcard entries may still be used in `allowed_scopes` as policy shortcuts for concrete requests, but they are not issued as token scopes.
 
 ## Rules of thumb
 
 - Register a service as a client only when it calls another service.
 - Register the receiving service name as an audience, not as a client, unless it also calls other services.
 - Use narrow scopes for concrete actions.
-- Use wildcard scopes only for trusted service clients.
+- Use wildcard request selectors only for trusted service clients.
 - Validate `iss`, `aud`, `exp`, `nbf`, signature, `token_use`, and required scopes.

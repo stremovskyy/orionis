@@ -5,13 +5,13 @@ This directory contains templates for running the published Orionis auth-server 
 The default image is Docker Hub:
 
 ```text
-stremovskyy/orionis:0.3.0
+stremovskyy/orionis:0.3.1
 ```
 
 You can replace it with the equivalent GHCR image:
 
 ```text
-ghcr.io/stremovskyy/orionis:0.3.0
+ghcr.io/stremovskyy/orionis:0.3.1
 ```
 
 ## Runtime model

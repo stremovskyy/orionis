@@ -13,7 +13,7 @@
   "containerDefinitions": [
     {
       "name": "orionis-auth",
-      "image": "stremovskyy/orionis:0.3.0",
+      "image": "stremovskyy/orionis:0.3.1",
       "essential": true,
       "entryPoint": ["/bin/sh", "-c"],
       "command": [

@@ -534,13 +534,15 @@ func (s *Server) TokenHTTP(w http.ResponseWriter, r *http.Request) {
 		requestedScopes = client.DefaultScopes
 	}
 
-	if containsInvalidScopeWildcard(requestedScopes) || !isScopeSetAllowed(requestedScopes, client.AllowedScopes) {
+	issuedScopes, ok := resolveRequestedScopes(requestedScopes, client.AllowedScopes)
+
+	if !ok {
 		s.writeOAuthError(w, http.StatusBadRequest, "invalid_scope", "client requested a scope that is not allowed")
 
 		return
 	}
 
-	resp, err := s.issueAccessToken(client, audience, requestedScopes)
+	resp, err := s.issueAccessToken(client, audience, issuedScopes)
 	if err != nil {
 		s.writeOAuthError(w, http.StatusInternalServerError, "server_error", "cannot issue token")
 
@@ -707,16 +709,6 @@ func contains(items []string, needle string) bool {
 	return slices.Contains(items, strings.TrimSpace(needle))
 }
 
-func isScopeSetAllowed(requested []string, allowed []string) bool {
-	for _, item := range requested {
-		if !isScopeAllowed(item, allowed) {
-			return false
-		}
-	}
-
-	return true
-}
-
 func isScopeAllowed(requested string, allowed []string) bool {
 	for _, pattern := range allowed {
 		if orionis.ScopeCovers(pattern, requested) {
@@ -725,6 +717,52 @@ func isScopeAllowed(requested string, allowed []string) bool {
 	}
 
 	return false
+}
+
+func resolveRequestedScopes(requested []string, allowed []string) ([]string, bool) {
+	if containsInvalidScopeWildcard(requested) {
+		return nil, false
+	}
+
+	issued := make([]string, 0, len(requested))
+
+	for _, scope := range requested {
+		if containsScopeWildcard(scope) {
+			expanded := expandWildcardScopeRequest(scope, allowed)
+
+			if len(expanded) == 0 {
+				return nil, false
+			}
+
+			issued = append(issued, expanded...)
+
+			continue
+		}
+
+		if !isScopeAllowed(scope, allowed) {
+			return nil, false
+		}
+
+		issued = append(issued, scope)
+	}
+
+	return orionis.NormalizeScopes(issued), true
+}
+
+func expandWildcardScopeRequest(requested string, allowed []string) []string {
+	expanded := make([]string, 0, len(allowed))
+
+	for _, scope := range allowed {
+		if containsScopeWildcard(scope) {
+			continue
+		}
+
+		if orionis.ScopeCovers(requested, scope) {
+			expanded = append(expanded, scope)
+		}
+	}
+
+	return orionis.NormalizeScopes(expanded)
 }
 
 func containsInvalidScopeWildcard(scopes []string) bool {
