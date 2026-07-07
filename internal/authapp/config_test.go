@@ -443,6 +443,94 @@ func TestMountAddsReadyzWithRateLimitAndAudit(t *testing.T) {
 	}
 }
 
+func TestMountUsesConfiguredBasePath(t *testing.T) {
+	cfgPath := writeConfig(t, `{
+		"listen": ":8080",
+		"log_level": "info",
+		"issuer": "https://ms.utaxcloud.net/auth",
+		"base_path": "/auth",
+		"key": {
+			"kid": "base-path-key",
+			"private_key_path": "`+filepath.ToSlash(filepath.Join(t.TempDir(), "base-path.pem"))+`"
+		},
+		"clients": [
+			{
+				"id": "orders-service",
+				"secrets": ["do-not-log-this"],
+				"allowed_audiences": ["billing-api"],
+				"allowed_scopes": ["billing.invoice.create"],
+				"default_scopes": ["billing.invoice.create"]
+			}
+		]
+	}`)
+
+	cfg, err := LoadConfig(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	runtime, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := gin.New()
+
+	if err := runtime.Mount(r); err != nil {
+		t.Fatal(err)
+	}
+
+	health := httptest.NewRecorder()
+	r.ServeHTTP(health, httptest.NewRequest(http.MethodGet, "/auth/healthz", nil))
+
+	if health.Code != http.StatusOK {
+		t.Fatalf("expected base-path healthz 200, got %d: %s", health.Code, health.Body.String())
+	}
+
+	rootHealth := httptest.NewRecorder()
+	r.ServeHTTP(rootHealth, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+
+	if rootHealth.Code != http.StatusNotFound {
+		t.Fatalf("expected root healthz to stay unmounted with base path, got %d", rootHealth.Code)
+	}
+
+	discovery := httptest.NewRecorder()
+	r.ServeHTTP(discovery, httptest.NewRequest(http.MethodGet, "/auth/.well-known/openid-configuration", nil))
+
+	if discovery.Code != http.StatusOK {
+		t.Fatalf("expected discovery 200, got %d: %s", discovery.Code, discovery.Body.String())
+	}
+
+	var body map[string]any
+
+	if err := json.Unmarshal(discovery.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+
+	if body["issuer"] != "https://ms.utaxcloud.net/auth" {
+		t.Fatalf("unexpected issuer: %#v", body["issuer"])
+	}
+
+	if body["token_endpoint"] != "https://ms.utaxcloud.net/auth/oauth/token" {
+		t.Fatalf("unexpected token endpoint: %#v", body["token_endpoint"])
+	}
+
+	form := url.Values{}
+	form.Set("grant_type", "client_credentials")
+	form.Set("audience", "billing-api")
+	form.Set("scope", "billing.invoice.create")
+
+	token := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/auth/oauth/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("orders-service", "do-not-log-this")
+	r.ServeHTTP(token, req)
+
+	if token.Code != http.StatusOK {
+		t.Fatalf("expected base-path token 200, got %d: %s", token.Code, token.Body.String())
+	}
+}
+
 func TestTokenAuditLogRedactsSecrets(t *testing.T) {
 	previousMode := gin.Mode()
 	previousLogger := slog.Default()

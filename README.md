@@ -146,13 +146,13 @@ ORIONIS_SCOPE          default: billing.invoice.create
 Pull the published auth server image from Docker Hub:
 
 ```bash
-docker pull stremovskyy/orionis:0.3.1
+docker pull stremovskyy/orionis:0.3.2
 ```
 
 Or pull the GitHub Packages mirror from GitHub Container Registry:
 
 ```bash
-docker pull ghcr.io/stremovskyy/orionis:0.3.1
+docker pull ghcr.io/stremovskyy/orionis:0.3.2
 ```
 
 Run Orionis from the published image:
@@ -165,7 +165,7 @@ docker run --rm -d \
   -p 8080:8080 \
   -v "$PWD/config:/app/config:ro" \
   -v orionis-var:/app/var \
-  stremovskyy/orionis:0.3.1
+  stremovskyy/orionis:0.3.2
 ```
 
 Or use the release Compose file:
@@ -181,7 +181,7 @@ curl -fsS http://localhost:8080/readyz
 Pin a released image in deployed environments:
 
 ```bash
-ORIONIS_IMAGE_TAG=0.3.1 docker compose -f docker-compose.release.yml up -d
+ORIONIS_IMAGE_TAG=0.3.2 docker compose -f docker-compose.release.yml up -d
 ```
 
 The published image expects its config at `/app/config/orionis.json` by default.
@@ -193,20 +193,20 @@ injected secret environment variables instead.
 The GitHub Container Registry image uses the same tags as Docker Hub:
 
 ```bash
-docker pull ghcr.io/stremovskyy/orionis:0.3.1
+docker pull ghcr.io/stremovskyy/orionis:0.3.2
 
 docker run --rm -d \
   --name orionis-auth \
   -p 8080:8080 \
   -v "$PWD/config:/app/config:ro" \
   -v orionis-var:/app/var \
-  ghcr.io/stremovskyy/orionis:0.3.1
+  ghcr.io/stremovskyy/orionis:0.3.2
 ```
 
 ## Deploy on AWS ECS Fargate
 
 Use the templates in [`deploy/aws/ecs`](deploy/aws/ecs) to run the published image on ECS Fargate.
-The default task definition uses `stremovskyy/orionis:0.3.1`, `awsvpc` networking, CloudWatch logs,
+The default task definition uses `stremovskyy/orionis:0.3.2`, `awsvpc` networking, CloudWatch logs,
 a `/healthz` container health check, `/readyz` readiness endpoint, AWS Secrets Manager for
 `ORIONIS_CONFIG_JSON`, and AWS Secrets Manager secret injection for overlapping signing-key PEMs.
 It does not mount EFS or write signing keys to `/app/var`.

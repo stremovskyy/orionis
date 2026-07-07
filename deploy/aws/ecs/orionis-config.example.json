@@ -2,6 +2,7 @@
   "listen": ":8080",
   "log_level": "info",
   "issuer": "https://auth.example.internal",
+  "base_path": "",
   "access_token_ttl": "15m",
   "active_kid": "orionis-ecs-ed25519-2",
   "keys": [

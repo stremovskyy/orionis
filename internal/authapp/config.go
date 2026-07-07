@@ -40,6 +40,7 @@ type Config struct {
 	Listen         string           `json:"listen"`
 	LogLevel       string           `json:"log_level"`
 	Issuer         string           `json:"issuer"`
+	BasePath       string           `json:"base_path,omitempty"`
 	AccessTokenTTL string           `json:"access_token_ttl"`
 	ActiveKID      string           `json:"active_kid,omitempty"`
 	Key            KeyConfig        `json:"key"`

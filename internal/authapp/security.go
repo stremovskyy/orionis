@@ -25,6 +25,7 @@
 package authapp
 
 import (
+	"errors"
 	"log/slog"
 	"math"
 	"net"
@@ -64,13 +65,38 @@ func mountAuthRoutes(r *gin.Engine, auth *server.Server, cfg Config) error {
 		return err
 	}
 
-	r.POST("/oauth/token", security.handlers("token", security.tokenLimit, gin.WrapF(auth.TokenHTTP))...)
-	r.GET("/.well-known/jwks.json", gin.WrapF(auth.JWKSHTTP))
-	r.GET("/.well-known/openid-configuration", gin.WrapF(auth.DiscoveryHTTP))
-	r.GET("/healthz", gin.WrapF(auth.HealthHTTP))
-	r.GET("/readyz", security.handlers("readyz", security.readyzLimit, gin.WrapF(auth.HealthHTTP))...)
+	basePath, err := normalizeBasePath(cfg.BasePath)
+	if err != nil {
+		return err
+	}
+
+	routes := r.Group(basePath)
+	routes.POST("/oauth/token", security.handlers("token", security.tokenLimit, gin.WrapF(auth.TokenHTTP))...)
+	routes.GET("/.well-known/jwks.json", gin.WrapF(auth.JWKSHTTP))
+	routes.GET("/.well-known/openid-configuration", gin.WrapF(auth.DiscoveryHTTP))
+	routes.GET("/healthz", gin.WrapF(auth.HealthHTTP))
+	routes.GET("/readyz", security.handlers("readyz", security.readyzLimit, gin.WrapF(auth.HealthHTTP))...)
 
 	return nil
+}
+
+func normalizeBasePath(value string) (string, error) {
+	basePath := strings.TrimSpace(value)
+	if basePath == "" || basePath == "/" {
+		return "", nil
+	}
+
+	if !strings.HasPrefix(basePath, "/") {
+		basePath = "/" + basePath
+	}
+
+	basePath = strings.TrimRight(basePath, "/")
+
+	if strings.Contains(basePath, "//") {
+		return "", errors.New("base_path must not contain empty path segments")
+	}
+
+	return basePath, nil
 }
 
 func newRuntimeSecurity(cfg Config) (*runtimeSecurity, error) {

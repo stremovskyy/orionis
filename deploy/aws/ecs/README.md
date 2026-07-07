@@ -5,13 +5,13 @@ This directory contains templates for running the published Orionis auth-server 
 The default image is Docker Hub:
 
 ```text
-stremovskyy/orionis:0.3.1
+stremovskyy/orionis:0.3.2
 ```
 
 You can replace it with the equivalent GHCR image:
 
 ```text
-ghcr.io/stremovskyy/orionis:0.3.1
+ghcr.io/stremovskyy/orionis:0.3.2
 ```
 
 ## Runtime model
@@ -54,6 +54,8 @@ aws secretsmanager create-secret \
 
 Copy `orionis-config.example.json`, replace placeholders, and store the full JSON as the config secret.
 The example config publishes both keys through `keys`, and `active_kid` selects the signer for new tokens:
+Set `base_path` only when Orionis is served behind a path prefix, for example
+`"issuer": "https://ms.utaxcloud.net/auth"` with `"base_path": "/auth"`.
 
 ```bash
 aws secretsmanager create-secret \
