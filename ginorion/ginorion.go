@@ -501,6 +501,7 @@ func RegisterAuthRoutes(routes gin.IRoutes, auth *server.Server) {
 
 func defaultErrorHandler(c *gin.Context, status int, code string, err error) {
 	attrs := []any{"status", status, "code", code}
+
 	if err != nil {
 		attrs = append(attrs, "error", err)
 	}
@@ -529,6 +530,7 @@ func publicErrorMessage(status int, code string) string {
 		return "insufficient scope"
 	case "auth_misconfigured":
 		return "authentication service unavailable"
+
 	default:
 		if status >= http.StatusInternalServerError {
 			return "authentication service unavailable"

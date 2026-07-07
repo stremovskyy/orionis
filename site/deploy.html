@@ -22,10 +22,10 @@
       <p>Use Docker Hub as the primary public image source, or GitHub Container Registry when you want a GitHub-native mirror.</p>
 
       <h2>Docker Hub</h2>
-      <pre><code>docker pull stremovskyy/orionis:0.2.0</code></pre>
+      <pre><code>docker pull stremovskyy/orionis:0.3.0</code></pre>
 
       <h2>GitHub Container Registry</h2>
-      <pre><code>docker pull ghcr.io/stremovskyy/orionis:0.2.0</code></pre>
+      <pre><code>docker pull ghcr.io/stremovskyy/orionis:0.3.0</code></pre>
 
       <h2>Run the auth server</h2>
       <pre><code>test -f config/orionis.json || cp config/orionis.example.json config/orionis.json
@@ -35,7 +35,7 @@ docker run --rm -d \
   -p 8080:8080 \
   -v "$PWD/config:/app/config:ro" \
   -v orionis-var:/app/var \
-  stremovskyy/orionis:0.2.0</code></pre>
+  stremovskyy/orionis:0.3.0</code></pre>
 
       <h2>Verify health</h2>
       <pre><code>curl -fsS http://localhost:8080/healthz

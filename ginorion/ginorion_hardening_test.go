@@ -30,6 +30,7 @@ func TestDefaultErrorHandlerDoesNotExposeInternalVerifierErrors(t *testing.T) {
 	}
 
 	var body map[string]string
+
 	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}

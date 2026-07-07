@@ -106,9 +106,273 @@ func TestInvalidScopeRejected(t *testing.T) {
 	}
 }
 
+func TestClientCredentialsAllowConcreteScopesByAllowedWildcard(t *testing.T) {
+	auth, signer := newWildcardTestServer(t)
+	form := url.Values{}
+	form.Set("grant_type", "client_credentials")
+	form.Set("audience", "billing-api")
+	form.Set("scope", "billing.invoice.create billing.invoice.read")
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("orders-service", "secret")
+	res := httptest.NewRecorder()
+	auth.TokenHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+
+	var tr orionis.TokenResponse
+
+	if err := json.Unmarshal(res.Body.Bytes(), &tr); err != nil {
+		t.Fatal(err)
+	}
+
+	if tr.Scope != "billing.invoice.create billing.invoice.read" {
+		t.Fatalf("unexpected response scope: %q", tr.Scope)
+	}
+
+	if strings.Contains(tr.Scope, "*") {
+		t.Fatalf("token response must not include wildcard scope: %q", tr.Scope)
+	}
+
+	provider, err := signer.StaticProvider()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	verified, err := orionis.NewVerifier().
+		Issuer("https://auth.orionis.test").
+		Audience("billing-api").
+		Keys(provider).
+		Verify(context.Background(), tr.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !verified.Claims.HasAllScopes("billing.invoice.create", "billing.invoice.read") {
+		t.Fatalf("missing concrete scopes: %q", verified.Claims.Scope)
+	}
+
+	if strings.Contains(verified.Claims.Scope, "*") {
+		t.Fatalf("jwt scope must not include wildcard: %q", verified.Claims.Scope)
+	}
+}
+
+func TestClientCredentialsAllowWildcardScopeRequest(t *testing.T) {
+	auth, signer := newPolicyTestServer(t, "target.webhooks.**", "target.products.*")
+	form := url.Values{}
+	form.Set("grant_type", "client_credentials")
+	form.Set("audience", "billing-api")
+	form.Set("scope", "target.webhooks.* target.products.*")
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("orders-service", "secret")
+	res := httptest.NewRecorder()
+	auth.TokenHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+
+	var tr orionis.TokenResponse
+
+	if err := json.Unmarshal(res.Body.Bytes(), &tr); err != nil {
+		t.Fatal(err)
+	}
+
+	if tr.Scope != "target.products.* target.webhooks.*" {
+		t.Fatalf("unexpected response scope: %q", tr.Scope)
+	}
+
+	provider, err := signer.StaticProvider()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	verified, err := orionis.NewVerifier().
+		Issuer("https://auth.orionis.test").
+		Audience("billing-api").
+		Keys(provider).
+		Verify(context.Background(), tr.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if verified.Claims.Scope != "target.products.* target.webhooks.*" {
+		t.Fatalf("unexpected jwt scope: %q", verified.Claims.Scope)
+	}
+}
+
+func TestClientCredentialsWildcardAllowedScopeMatchesOneSegment(t *testing.T) {
+	auth, _ := newWildcardTestServer(t)
+
+	for _, scope := range []string{
+		"billing.invoice",
+		"billing.invoice.admin.delete",
+	} {
+		t.Run(scope, func(t *testing.T) {
+			form := url.Values{}
+			form.Set("grant_type", "client_credentials")
+			form.Set("audience", "billing-api")
+			form.Set("scope", scope)
+			req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.SetBasicAuth("orders-service", "secret")
+			res := httptest.NewRecorder()
+			auth.TokenHTTP(res, req)
+
+			if res.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d: %s", res.Code, res.Body.String())
+			}
+		})
+	}
+}
+
+func TestClientCredentialsRecursiveWildcardAllowedScopeMatchesDeepScopes(t *testing.T) {
+	auth, _ := newPolicyTestServer(t, "billing.invoice.**")
+
+	for _, scope := range []string{
+		"billing.invoice.read",
+		"billing.invoice.admin.delete",
+		"billing.invoice.*",
+		"billing.invoice.**",
+	} {
+		t.Run(scope, func(t *testing.T) {
+			form := url.Values{}
+			form.Set("grant_type", "client_credentials")
+			form.Set("audience", "billing-api")
+			form.Set("scope", scope)
+			req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.SetBasicAuth("orders-service", "secret")
+			res := httptest.NewRecorder()
+			auth.TokenHTTP(res, req)
+
+			if res.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+			}
+		})
+	}
+}
+
+func TestClientCredentialsRejectsUnallowedWildcardScopeRequest(t *testing.T) {
+	auth, _ := newPolicyTestServer(t, "target.webhooks.**")
+	form := url.Values{}
+	form.Set("grant_type", "client_credentials")
+	form.Set("audience", "billing-api")
+	form.Set("scope", "target.webhooks.* target.products.*")
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("orders-service", "secret")
+	res := httptest.NewRecorder()
+	auth.TokenHTTP(res, req)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", res.Code, res.Body.String())
+	}
+}
+
+func TestClientCredentialsRejectsRecursiveWildcardRequestWhenOnlySingleSegmentAllowed(t *testing.T) {
+	auth, _ := newPolicyTestServer(t, "billing.invoice.*")
+	form := url.Values{}
+	form.Set("grant_type", "client_credentials")
+	form.Set("audience", "billing-api")
+	form.Set("scope", "billing.invoice.**")
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("orders-service", "secret")
+	res := httptest.NewRecorder()
+	auth.TokenHTTP(res, req)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", res.Code, res.Body.String())
+	}
+}
+
+func TestClientCredentialsRejectsInvalidWildcardScopeRequest(t *testing.T) {
+	auth, _ := newPolicyTestServer(t, "billing.**")
+	form := url.Values{}
+	form.Set("grant_type", "client_credentials")
+	form.Set("audience", "billing-api")
+	form.Set("scope", "billing.*.read")
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("orders-service", "secret")
+	res := httptest.NewRecorder()
+	auth.TokenHTTP(res, req)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", res.Code, res.Body.String())
+	}
+}
+
+func TestBuildRejectsInvalidWildcardScopePolicy(t *testing.T) {
+	for _, scope := range []string{
+		"*",
+		"billing.*.read",
+		"billing.*.*",
+		"billing.**.read",
+		"billing.***",
+		".*",
+		".**",
+	} {
+		t.Run(scope, func(t *testing.T) {
+			signer, err := jwk.Ed25519().KID("test-ed25519").Build()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = server.New().
+				Issuer("https://auth.orionis.test").
+				Signer(signer).
+				Client(
+					server.NewClient("orders-service").
+						Secret("secret").
+						Audience("billing-api").
+						Scopes(scope),
+				).
+				Build()
+			if err == nil {
+				t.Fatalf("expected invalid wildcard scope policy %q to be rejected", scope)
+			}
+		})
+	}
+}
+
+func TestBuildRejectsWildcardDefaultScopes(t *testing.T) {
+	for _, scope := range []string{"billing.invoice.*", "billing.invoice.**"} {
+		t.Run(scope, func(t *testing.T) {
+			signer, err := jwk.Ed25519().KID("test-ed25519").Build()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = server.New().
+				Issuer("https://auth.orionis.test").
+				Signer(signer).
+				Client(
+					server.NewClient("orders-service").
+						Secret("secret").
+						Audience("billing-api").
+						Scopes("billing.invoice.**").
+						Defaults(scope),
+				).
+				Build()
+			if err == nil {
+				t.Fatalf("expected wildcard default scope %q to be rejected", scope)
+			}
+		})
+	}
+}
+
 func TestTokenRequestBodyLimitRejected(t *testing.T) {
 	auth, _ := newTestServer(t)
-	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(strings.Repeat("a", server.DefaultMaxTokenRequestBody+1)))
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/oauth/token",
+		strings.NewReader(strings.Repeat("a", server.DefaultMaxTokenRequestBody+1)),
+	)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	res := httptest.NewRecorder()
 	auth.TokenHTTP(res, req)
@@ -152,6 +416,38 @@ func newTestServer(t *testing.T) (*server.Server, *jwk.Ed25519Signer) {
 				Secret("secret").
 				Audience("billing-api").
 				Scopes("billing.invoice.create", "billing.invoice.read").
+				Defaults("billing.invoice.read"),
+		).
+		Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return auth, signer
+}
+
+func newWildcardTestServer(t *testing.T) (*server.Server, *jwk.Ed25519Signer) {
+	t.Helper()
+
+	return newPolicyTestServer(t, "billing.invoice.*")
+}
+
+func newPolicyTestServer(t *testing.T, allowedScopes ...string) (*server.Server, *jwk.Ed25519Signer) {
+	t.Helper()
+	signer, err := jwk.Ed25519().KID("test-ed25519").Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	auth, err := server.New().
+		Issuer("https://auth.orionis.test").
+		Signer(signer).
+		AccessTokenTTL(15 * time.Minute).
+		Client(
+			server.NewClient("orders-service").
+				Secret("secret").
+				Audience("billing-api").
+				Scopes(allowedScopes...).
 				Defaults("billing.invoice.read"),
 		).
 		Build()

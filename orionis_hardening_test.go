@@ -94,3 +94,27 @@ func TestVerifierRejectsWrongAudience(t *testing.T) {
 		t.Fatalf("expected wrong audience to be rejected")
 	}
 }
+
+func TestClaimsWildcardScopesMatchConcreteRequirements(t *testing.T) {
+	claims := &orionis.Claims{Scope: "target.products.* target.webhooks.**"}
+
+	if !claims.HasScope("target.webhooks.admin.delete") {
+		t.Fatalf("expected recursive wildcard to match deep concrete scope")
+	}
+
+	if !claims.HasScope("target.products.read") {
+		t.Fatalf("expected single-segment wildcard to match direct concrete scope")
+	}
+
+	if claims.HasScope("target.products.admin.delete") {
+		t.Fatalf("single-segment wildcard must not match deep concrete scope")
+	}
+
+	if !claims.HasAnyScope("target.products.admin.delete", "target.webhooks.admin.delete") {
+		t.Fatalf("expected HasAnyScope to match recursive wildcard")
+	}
+
+	if !claims.HasAllScopes("target.products.read", "target.webhooks.admin.delete") {
+		t.Fatalf("expected HasAllScopes to match wildcard-owned concrete requirements")
+	}
+}

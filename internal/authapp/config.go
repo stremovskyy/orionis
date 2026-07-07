@@ -106,6 +106,12 @@ func LoadConfig(path string) (Config, error) {
 		return cfg, errors.New("at least one client is required")
 	}
 
+	for i, client := range cfg.Clients {
+		if err := client.ValidateScopePolicy(); err != nil {
+			return cfg, fmt.Errorf("clients[%d]: %w", i, err)
+		}
+	}
+
 	if err := validateSigningConfig(cfg); err != nil {
 		return cfg, err
 	}

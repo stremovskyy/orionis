@@ -42,35 +42,7 @@ import (
 
 func TestGuardAllowsValidScope(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	signer, err := jwk.Ed25519().KID("test-ed25519").Build()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	claims := &orionis.Claims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    "https://auth.orionis.test",
-			Subject:   "orders-service",
-			Audience:  jwt.ClaimStrings{"billing-api"},
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute)),
-			NotBefore: jwt.NewNumericDate(time.Now().Add(-time.Second)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-		},
-		ClientID: "orders-service",
-		Scope:    "billing.invoice.create",
-		TokenUse: orionis.TokenUseAccess,
-	}
-	token, err := signer.Sign(claims)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	provider, err := signer.StaticProvider()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	verifier := orionis.NewVerifier().Issuer("https://auth.orionis.test").Audience("billing-api").Keys(provider)
+	token, verifier := signedTestToken(t, "billing.invoice.create")
 
 	if _, err := verifier.Verify(context.Background(), token); err != nil {
 		t.Fatal(err)
@@ -97,6 +69,93 @@ func TestGuardAllowsValidScope(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
 	}
+}
+
+func TestGuardAllowsRecursiveWildcardScope(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	token, verifier := signedTestToken(t, "target.webhooks.**")
+
+	guard, err := ginorion.New().Verifier(verifier).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := gin.New()
+	r.GET(
+		"/protected", guard.Require("target.webhooks.admin.delete"), func(c *gin.Context) {
+			c.Status(http.StatusNoContent)
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	res := httptest.NewRecorder()
+	r.ServeHTTP(res, req)
+
+	if res.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", res.Code, res.Body.String())
+	}
+}
+
+func TestGuardRejectsSingleSegmentWildcardForDeepScope(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	token, verifier := signedTestToken(t, "target.webhooks.*")
+
+	guard, err := ginorion.New().Verifier(verifier).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := gin.New()
+	r.GET(
+		"/protected", guard.Require("target.webhooks.admin.delete"), func(c *gin.Context) {
+			c.Status(http.StatusNoContent)
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	res := httptest.NewRecorder()
+	r.ServeHTTP(res, req)
+
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", res.Code, res.Body.String())
+	}
+}
+
+func signedTestToken(t *testing.T, scope string) (string, *orionis.Verifier) {
+	t.Helper()
+	signer, err := jwk.Ed25519().KID("test-ed25519").Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	claims := &orionis.Claims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "https://auth.orionis.test",
+			Subject:   "orders-service",
+			Audience:  jwt.ClaimStrings{"billing-api"},
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute)),
+			NotBefore: jwt.NewNumericDate(time.Now().Add(-time.Second)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+		ClientID: "orders-service",
+		Scope:    scope,
+		TokenUse: orionis.TokenUseAccess,
+	}
+	token, err := signer.Sign(claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	provider, err := signer.StaticProvider()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	verifier := orionis.NewVerifier().Issuer("https://auth.orionis.test").Audience("billing-api").Keys(provider)
+
+	return token, verifier
 }
 
 var _ server.Signer = (*jwk.Ed25519Signer)(nil)

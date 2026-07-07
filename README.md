@@ -146,13 +146,13 @@ ORIONIS_SCOPE          default: billing.invoice.create
 Pull the published auth server image from Docker Hub:
 
 ```bash
-docker pull stremovskyy/orionis:0.2.0
+docker pull stremovskyy/orionis:0.3.0
 ```
 
 Or pull the GitHub Packages mirror from GitHub Container Registry:
 
 ```bash
-docker pull ghcr.io/stremovskyy/orionis:0.2.0
+docker pull ghcr.io/stremovskyy/orionis:0.3.0
 ```
 
 Run Orionis from the published image:
@@ -165,7 +165,7 @@ docker run --rm -d \
   -p 8080:8080 \
   -v "$PWD/config:/app/config:ro" \
   -v orionis-var:/app/var \
-  stremovskyy/orionis:0.2.0
+  stremovskyy/orionis:0.3.0
 ```
 
 Or use the release Compose file:
@@ -181,7 +181,7 @@ curl -fsS http://localhost:8080/readyz
 Pin a released image in deployed environments:
 
 ```bash
-ORIONIS_IMAGE_TAG=0.2.0 docker compose -f docker-compose.release.yml up -d
+ORIONIS_IMAGE_TAG=0.3.0 docker compose -f docker-compose.release.yml up -d
 ```
 
 The published image expects its config at `/app/config/orionis.json` by default.
@@ -193,20 +193,20 @@ injected secret environment variables instead.
 The GitHub Container Registry image uses the same tags as Docker Hub:
 
 ```bash
-docker pull ghcr.io/stremovskyy/orionis:0.2.0
+docker pull ghcr.io/stremovskyy/orionis:0.3.0
 
 docker run --rm -d \
   --name orionis-auth \
   -p 8080:8080 \
   -v "$PWD/config:/app/config:ro" \
   -v orionis-var:/app/var \
-  ghcr.io/stremovskyy/orionis:0.2.0
+  ghcr.io/stremovskyy/orionis:0.3.0
 ```
 
 ## Deploy on AWS ECS Fargate
 
 Use the templates in [`deploy/aws/ecs`](deploy/aws/ecs) to run the published image on ECS Fargate.
-The default task definition uses `stremovskyy/orionis:0.2.0`, `awsvpc` networking, CloudWatch logs,
+The default task definition uses `stremovskyy/orionis:0.3.0`, `awsvpc` networking, CloudWatch logs,
 a `/healthz` container health check, `/readyz` readiness endpoint, AWS Secrets Manager for
 `ORIONIS_CONFIG_JSON`, and AWS Secrets Manager secret injection for overlapping signing-key PEMs.
 It does not mount EFS or write signing keys to `/app/var`.
@@ -569,14 +569,18 @@ Add the caller service to the auth server config:
       "secret_sha256_hex": ["<CLIENT_SECRET_SHA>"],
       "allowed_audiences": ["target-api"],
       "allowed_scopes": [
-        "target.read",
-        "target.write"
+        "target.webhooks.**",
+        "target.products.*"
       ],
-      "default_scopes": ["target.read"]
+      "default_scopes": ["target.webhooks.read"]
     }
   ]
 }
 ```
+
+`allowed_scopes` accepts suffix wildcards.
+Use `target.products.*` for one segment such as `target.products.read`, and `target.webhooks.**` for recursive access such as `target.webhooks.read` and `target.webhooks.admin.delete`.
+Callers may request multiple concrete or wildcard scopes as a space-separated OAuth `scope` value.
 
 Request a token from the calling service:
 
@@ -589,7 +593,7 @@ curl -fsS \
   -H 'Content-Type: application/x-www-form-urlencoded' \
   -d 'grant_type=client_credentials' \
   -d 'audience=target-api' \
-  -d 'scope=target.write' \
+  -d 'scope=target.webhooks.* target.products.*' \
   https://auth.example.internal/oauth/token | jq
 ```
 
@@ -614,7 +618,7 @@ if err != nil {
 }
 
 r.POST("/internal/action",
-    guard.Require("target.write"),
+    guard.Require("target.webhooks.resend"),
     func(c *gin.Context) {
         claims := ginorion.MustClaims(c)
         c.JSON(http.StatusOK, gin.H{"called_by": claims.ClientID})
@@ -627,6 +631,7 @@ Rules of thumb:
 - Register a service as a client only when it calls another service.
 - Register the receiving service name as an audience, not as a client, unless it also calls other services.
 - Use narrow scopes for concrete actions instead of broad names like `admin` or `full_access`.
+- Use wildcard scopes only for trusted service clients; route checks should still require concrete scopes.
 - Keep example names, domains, hashes, and secrets as placeholders in documentation.
 
 # Extension points

@@ -218,6 +218,55 @@ func TestLoadConfigRejectsMissingClients(t *testing.T) {
 	}
 }
 
+func TestLoadConfigRejectsWildcardDefaultScopes(t *testing.T) {
+	path := writeConfig(t, `{
+		"issuer": "https://auth.orionis.test",
+		"key": {"kid": "test-key", "private_key_path": "./var/test.pem"},
+		"clients": [
+			{
+				"id": "orders-service",
+				"secrets": ["secret"],
+				"allowed_audiences": ["billing-api"],
+				"allowed_scopes": ["billing.invoice.*"],
+				"default_scopes": ["billing.invoice.*"]
+			}
+		]
+	}`)
+
+	_, err := LoadConfig(path)
+	if err == nil {
+		t.Fatalf("expected wildcard default scope to be rejected")
+	}
+
+	if !strings.Contains(err.Error(), "default_scopes") {
+		t.Fatalf("expected default_scopes error, got %v", err)
+	}
+}
+
+func TestLoadConfigRejectsInvalidWildcardAllowedScopes(t *testing.T) {
+	path := writeConfig(t, `{
+		"issuer": "https://auth.orionis.test",
+		"key": {"kid": "test-key", "private_key_path": "./var/test.pem"},
+		"clients": [
+			{
+				"id": "orders-service",
+				"secrets": ["secret"],
+				"allowed_audiences": ["billing-api"],
+				"allowed_scopes": ["billing.*.read"]
+			}
+		]
+	}`)
+
+	_, err := LoadConfig(path)
+	if err == nil {
+		t.Fatalf("expected invalid wildcard allowed scope to be rejected")
+	}
+
+	if !strings.Contains(err.Error(), "allowed_scopes") {
+		t.Fatalf("expected allowed_scopes error, got %v", err)
+	}
+}
+
 func TestEd25519SignerLoaderKeepsFileModeCompatibility(t *testing.T) {
 	dir := t.TempDir()
 	keyPath := filepath.Join(dir, "orionis-ed25519.pem")

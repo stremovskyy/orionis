@@ -30,8 +30,8 @@ GET  /readyz
 ## Supported package surfaces
 
 ```bash
-docker pull stremovskyy/orionis:0.2.0
-docker pull ghcr.io/stremovskyy/orionis:0.2.0
+docker pull stremovskyy/orionis:0.3.0
+docker pull ghcr.io/stremovskyy/orionis:0.3.0
 go get github.com/stremovskyy/orionis
 ```
 

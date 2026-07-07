@@ -72,7 +72,13 @@ func (c *Claims) HasScope(scope string) bool {
 		return false
 	}
 
-	return slices.Contains(c.Scopes(), scope)
+	for _, owned := range c.Scopes() {
+		if ScopeCovers(owned, scope) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (c *Claims) HasAnyScope(required ...string) bool {
@@ -89,7 +95,7 @@ func (c *Claims) HasAnyScope(required ...string) bool {
 	owned := c.Scopes()
 
 	for _, scope := range required {
-		if slices.Contains(owned, scope) {
+		if scopeSetCovers(owned, scope) {
 			return true
 		}
 	}
@@ -111,7 +117,7 @@ func (c *Claims) HasAllScopes(required ...string) bool {
 	owned := c.Scopes()
 
 	for _, scope := range required {
-		if !slices.Contains(owned, scope) {
+		if !scopeSetCovers(owned, scope) {
 			return false
 		}
 	}
@@ -151,6 +157,98 @@ func NormalizeScopes(scopes []string) []string {
 
 func ScopeString(scopes []string) string {
 	return strings.Join(NormalizeScopes(scopes), " ")
+}
+
+func ScopeCovers(owned string, required string) bool {
+	owned = strings.TrimSpace(owned)
+	required = strings.TrimSpace(required)
+
+	if owned == "" || required == "" {
+		return false
+	}
+
+	if owned == required {
+		return true
+	}
+
+	if containsScopeWildcard(required) {
+		if _, _, ok := wildcardScopeParts(required); !ok {
+			return false
+		}
+	}
+
+	prefix, recursive, ok := wildcardScopeParts(owned)
+
+	if !ok {
+		return false
+	}
+
+	requiredPrefix := prefix + "."
+
+	if !strings.HasPrefix(required, requiredPrefix) {
+		return false
+	}
+
+	suffix := strings.TrimPrefix(required, requiredPrefix)
+
+	if suffix == "" {
+		return false
+	}
+
+	if recursive {
+		return true
+	}
+
+	return !strings.Contains(suffix, ".") && !containsScopeWildcard(suffix)
+}
+
+func ValidateScopeWildcard(scope string) error {
+	if !containsScopeWildcard(scope) {
+		return nil
+	}
+
+	if _, _, ok := wildcardScopeParts(scope); ok {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"invalid wildcard scope %q; only suffix patterns like \"prefix.*\" or \"prefix.**\" are allowed",
+		scope,
+	)
+}
+
+func scopeSetCovers(owned []string, required string) bool {
+	for _, scope := range owned {
+		if ScopeCovers(scope, required) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func wildcardScopeParts(scope string) (prefix string, recursive bool, ok bool) {
+	switch {
+	case strings.Count(scope, "*") == 1 && strings.HasSuffix(scope, ".*"):
+		prefix = strings.TrimSuffix(scope, ".*")
+
+	case strings.Count(scope, "*") == 2 && strings.HasSuffix(scope, ".**"):
+		prefix = strings.TrimSuffix(scope, ".**")
+		recursive = true
+
+	default:
+		return "", false, false
+	}
+
+	if strings.TrimSpace(prefix) == "" {
+		return "", false, false
+	}
+
+	return prefix, recursive, true
+}
+
+func containsScopeWildcard(scope string) bool {
+	return strings.Contains(scope, "*")
 }
 
 func BearerToken(header string) (string, error) {

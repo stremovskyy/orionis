@@ -131,6 +131,24 @@ func (c Client) Normalize() Client {
 	return c
 }
 
+func (c Client) ValidateScopePolicy() error {
+	c = c.Normalize()
+
+	for _, scope := range c.AllowedScopes {
+		if err := orionis.ValidateScopeWildcard(scope); err != nil {
+			return fmt.Errorf("allowed_scopes: %w", err)
+		}
+	}
+
+	for _, scope := range c.DefaultScopes {
+		if containsScopeWildcard(scope) {
+			return fmt.Errorf("default_scopes: wildcard scope %q is not allowed", scope)
+		}
+	}
+
+	return nil
+}
+
 func (c Client) VerifySecret(secret string) bool {
 	if secret == "" {
 		return false
@@ -422,6 +440,12 @@ func (b *Builder) Build() (*Server, error) {
 			return nil, errors.New("at least one client or client store is required")
 		}
 
+		for i, client := range b.clients {
+			if err := client.ValidateScopePolicy(); err != nil {
+				return nil, fmt.Errorf("clients[%d]: %w", i, err)
+			}
+		}
+
 		cfg.Store = NewMemoryClientStore(b.clients...)
 	}
 
@@ -510,7 +534,7 @@ func (s *Server) TokenHTTP(w http.ResponseWriter, r *http.Request) {
 		requestedScopes = client.DefaultScopes
 	}
 
-	if !isSubset(requestedScopes, client.AllowedScopes) {
+	if containsInvalidScopeWildcard(requestedScopes) || !isScopeSetAllowed(requestedScopes, client.AllowedScopes) {
 		s.writeOAuthError(w, http.StatusBadRequest, "invalid_scope", "client requested a scope that is not allowed")
 
 		return
@@ -683,14 +707,38 @@ func contains(items []string, needle string) bool {
 	return slices.Contains(items, strings.TrimSpace(needle))
 }
 
-func isSubset(requested []string, allowed []string) bool {
+func isScopeSetAllowed(requested []string, allowed []string) bool {
 	for _, item := range requested {
-		if !slices.Contains(allowed, item) {
+		if !isScopeAllowed(item, allowed) {
 			return false
 		}
 	}
 
 	return true
+}
+
+func isScopeAllowed(requested string, allowed []string) bool {
+	for _, pattern := range allowed {
+		if orionis.ScopeCovers(pattern, requested) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func containsInvalidScopeWildcard(scopes []string) bool {
+	for _, scope := range scopes {
+		if err := orionis.ValidateScopeWildcard(scope); err != nil {
+			return true
+		}
+	}
+
+	return false
+}
+
+func containsScopeWildcard(scope string) bool {
+	return strings.Contains(scope, "*")
 }
 
 func firstNonEmpty(values ...string) string {
