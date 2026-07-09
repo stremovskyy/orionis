@@ -403,6 +403,16 @@ func Router() (*gin.Engine, error) {
 }
 ```
 
+### JWKS validation lifecycle
+
+- `Build()` creates the remote JWKS provider, but it does not fetch keys yet
+- The first protected request that needs a signing key calls the JWKS endpoin
+- A request with an expired JWKS cache, or a token whose `kid` is not in the current cache, also triggers a JWKS HTTP GET
+- When the cached key is fresh, JWT validation is entirely in memory. The resource service does not call the authorization server on every request.
+- Validation checks the token signature, issuer, audience, time claims, allowed signing algorithm, `token_use`, and route-required scopes
+- The default remote JWKS refresh interval is `10m`, if refresh fails, an already cached key may be used for up to `1h` while it is still within the stale window
+- **Static key providers are fully local and never call a JWKS endpoint**
+
 ## 4. GIN resource service: custom verifier
 
 ```go
