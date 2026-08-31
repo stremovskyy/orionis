@@ -8,56 +8,63 @@ on:
 
 permissions:
   contents: read
-  id-token: write
-  packages: write
 
 env:
   DOCKERHUB_IMAGE: stremovskyy/orionis
   GHCR_IMAGE: ghcr.io/stremovskyy/orionis
 
 jobs:
-  publish:
-    name: Verify and publish image
+  verify:
+    name: Verify release contracts
     runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
           cache: true
 
-      - name: Install analysis tools
+      - name: Verify release contracts
+        env:
+          ORIONIS_VERIFY_IMAGE: ${{ env.DOCKERHUB_IMAGE }}:ci
+        run: make verify
+
+  publish:
+    name: Publish verified image
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate release metadata
         run: |
-          go install honnef.co/go/tools/cmd/staticcheck@latest
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-
-      - name: Run tests
-        run: go test ./...
-
-      - name: Run race tests
-        run: go test -race ./...
-
-      - name: Run go vet
-        run: go vet ./...
-
-      - name: Run staticcheck
-        run: staticcheck ./...
-
-      - name: Run govulncheck
-        run: govulncheck ./...
-
-      - name: Build auth image locally
-        run: docker build --build-arg TARGET=./cmd/orionis-auth -t "${DOCKERHUB_IMAGE}:ci" .
-
-      - name: Smoke auth image locally
-        run: scripts/smoke-release-image.sh "${DOCKERHUB_IMAGE}:ci"
+          printf '%s\n' "$GITHUB_REF_NAME" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'
+          test -f "docs/releases/${GITHUB_REF_NAME}.md"
+          git fetch --force --no-tags origin main:refs/remotes/origin/main
+          tag_commit=$(git rev-parse "${GITHUB_SHA}^{commit}")
+          main_commit=$(git rev-parse 'refs/remotes/origin/main^{commit}')
+          git merge-base --is-ancestor "$tag_commit" "$main_commit" || {
+            echo "Release tag must point to a commit on origin/main"
+            exit 1
+          }
 
       - name: Check Docker Hub configuration
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -66,32 +73,27 @@ jobs:
           test -n "$DOCKERHUB_TOKEN" || { echo "Missing repository secret DOCKERHUB_TOKEN"; exit 1; }
 
       - name: Set up QEMU
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
 
       - name: Set up Docker Buildx
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
       - name: Log in to Docker Hub
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Log in to GitHub Container Registry
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract Docker metadata
-        if: startsWith(github.ref, 'refs/tags/v')
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: |
             ${{ env.DOCKERHUB_IMAGE }}
@@ -103,8 +105,7 @@ jobs:
             type=sha,prefix=sha-
 
       - name: Build and push Docker image
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -115,3 +116,23 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           sbom: true
           provenance: true
+
+      - name: Smoke published images
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          for image in "${DOCKERHUB_IMAGE}:${version}" "${GHCR_IMAGE}:${version}"; do
+            docker pull "$image"
+            scripts/smoke-release-image.sh "$image"
+          done
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          notes="docs/releases/${GITHUB_REF_NAME}.md"
+          test -f "$notes" || { echo "Missing release notes: $notes"; exit 1; }
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" \
+              --verify-tag \
+              --title "Orionis ${GITHUB_REF_NAME}" \
+              --notes-file "$notes"

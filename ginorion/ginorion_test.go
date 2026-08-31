@@ -153,7 +153,7 @@ func signedTestToken(t *testing.T, scope string) (string, *orionis.Verifier) {
 		t.Fatal(err)
 	}
 
-	verifier := orionis.NewVerifier().Issuer("https://auth.orionis.test").Audience("billing-api").Keys(provider)
+	verifier := orionis.NewVerifier().Issuer("https://auth.orionis.test").Audience("billing-api").KeyProvider(provider)
 
 	return token, verifier
 }

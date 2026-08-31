@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.25.11-alpine AS builder
+FROM golang:1.25.14-alpine AS builder
 
 WORKDIR /src
 
@@ -14,7 +14,8 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/orionis ${TARGET}
 
 FROM alpine:3.22
 
-RUN apk add --no-cache ca-certificates \
+RUN apk upgrade --no-cache \
+	&& apk add --no-cache ca-certificates \
 	&& addgroup -S orionis \
 	&& adduser -S -G orionis -h /app orionis \
 	&& mkdir -p /app/config /app/var \

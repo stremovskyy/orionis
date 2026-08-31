@@ -30,9 +30,9 @@ GET  /readyz
 ## Supported package surfaces
 
 ```bash
-docker pull stremovskyy/orionis:0.3.1
-docker pull ghcr.io/stremovskyy/orionis:0.3.1
-go get github.com/stremovskyy/orionis
+docker pull stremovskyy/orionis:0.4.0
+docker pull ghcr.io/stremovskyy/orionis:0.4.0
+go get github.com/stremovskyy/orionis@v0.4.0
 ```
 
 AWS ECS/Fargate templates live in `deploy/aws/ecs/`.

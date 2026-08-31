@@ -34,6 +34,14 @@ func TestNewHTTPServerHasProductionTimeouts(t *testing.T) {
 	}
 }
 
+func TestRunHelpExitsSuccessfully(t *testing.T) {
+	t.Parallel()
+
+	if err := run(context.Background(), []string{"-h"}); err != nil {
+		t.Fatalf("run(-h) = %v, want nil", err)
+	}
+}
+
 func TestServeHTTPServerStopsOnContextCancel(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

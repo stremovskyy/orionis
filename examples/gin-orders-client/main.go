@@ -41,6 +41,13 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	if err := run(ctx); err != nil {
+		slog.Error("orders demo failed", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run(ctx context.Context) error {
 	tokenURL := getenv("ORIONIS_TOKEN_URL", "http://localhost:8080/oauth/token")
 	billingURL := getenv("BILLING_URL", "http://localhost:8081/invoices")
 
@@ -50,29 +57,32 @@ func main() {
 		For("billing-api", "billing.invoice.create").
 		BuildHTTPClient(http.DefaultClient)
 	if err != nil {
-		slog.Error("create authenticated http client", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("create authenticated http client: %w", err)
 	}
 
 	body := bytes.NewBufferString(`{"order_id":"ord_demo_001","amount":1500}`)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, billingURL, body)
 	if err != nil {
-		slog.Error("create request", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
 	res, err := hc.Do(req)
 	if err != nil {
-		slog.Error("call billing", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("call billing: %w", err)
 	}
 
 	defer res.Body.Close()
 
-	raw, _ := io.ReadAll(res.Body)
+	raw, err := io.ReadAll(res.Body)
+	if err != nil {
+		return fmt.Errorf("read billing response: %w", err)
+	}
+
 	fmt.Printf("status=%d\n%s\n", res.StatusCode, raw)
+
+	return nil
 }
 
 func getenv(key, fallback string) string {

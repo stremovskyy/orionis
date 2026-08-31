@@ -74,7 +74,7 @@ func TestClientCredentialsIssueAndVerify(t *testing.T) {
 	verifier := orionis.NewVerifier().
 		Issuer("https://auth.orionis.test").
 		Audience("billing-api").
-		Keys(provider)
+		KeyProvider(provider)
 	verified, err := verifier.Verify(context.Background(), tr.AccessToken)
 	if err != nil {
 		t.Fatal(err)
@@ -144,7 +144,7 @@ func TestClientCredentialsAllowConcreteScopesByAllowedWildcard(t *testing.T) {
 	verified, err := orionis.NewVerifier().
 		Issuer("https://auth.orionis.test").
 		Audience("billing-api").
-		Keys(provider).
+		KeyProvider(provider).
 		Verify(context.Background(), tr.AccessToken)
 	if err != nil {
 		t.Fatal(err)
@@ -203,7 +203,7 @@ func TestClientCredentialsWildcardScopeRequestExpandsConcreteAllowedScopes(t *te
 	verified, err := orionis.NewVerifier().
 		Issuer("https://auth.orionis.test").
 		Audience("billing-api").
-		Keys(provider).
+		KeyProvider(provider).
 		Verify(context.Background(), tr.AccessToken)
 	if err != nil {
 		t.Fatal(err)
@@ -541,8 +541,7 @@ func newPolicyTestServer(t *testing.T, allowedScopes ...string) (*server.Server,
 			server.NewClient("orders-service").
 				Secret("secret").
 				Audience("billing-api").
-				Scopes(allowedScopes...).
-				Defaults("billing.invoice.read"),
+				Scopes(allowedScopes...),
 		).
 		Build()
 	if err != nil {

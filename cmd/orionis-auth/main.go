@@ -26,12 +26,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/gin-gonic/gin"
@@ -40,36 +39,47 @@ import (
 )
 
 func main() {
-	cfgPath := flag.String(
+	if err := run(context.Background(), os.Args[1:]); err != nil {
+		slog.Error("orionis auth server stopped", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run(parent context.Context, args []string) error {
+	flags := flag.NewFlagSet("orionis-auth", flag.ContinueOnError)
+	cfgPath := flags.String(
 		"config",
 		getenv("ORIONIS_CONFIG", "config/orionis.example.json"),
 		"Path to Orionis JSON config",
 	)
-	flag.Parse()
+
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+
+		return err
+	}
 
 	cfg, err := authapp.LoadConfig(*cfgPath)
 	if err != nil {
-		slog.Error("load config", "error", err)
-		os.Exit(1)
-	}
-
-	runtime, err := authapp.New(cfg)
-	if err != nil {
-		slog.Error("create auth server", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	level, err := configureRuntimeMode(cfg.LogLevel)
 	if err != nil {
-		slog.Error("configure runtime mode", "error", err)
-		os.Exit(1)
+		return err
+	}
+
+	runtime, err := authapp.New(cfg)
+	if err != nil {
+		return err
 	}
 
 	r := newGinEngine(level)
 
 	if err := runtime.Mount(r); err != nil {
-		slog.Error("mount auth routes", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	slog.Info(
@@ -81,13 +91,10 @@ func main() {
 	)
 
 	httpServer := newHTTPServer(cfg.ListenAddr(), r)
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := serveHTTPServer(ctx, httpServer, defaultShutdownTimeout, httpServer.ListenAndServe); err != nil {
-		slog.Error("gin server stopped", "error", err)
-		os.Exit(1)
-	}
+	return serveHTTPServer(ctx, httpServer, defaultShutdownTimeout, httpServer.ListenAndServe)
 }
 
 func configureRuntimeMode(logLevel string) (slog.Level, error) {
@@ -121,24 +128,7 @@ func newGinEngine(level slog.Level) *gin.Engine {
 }
 
 func parseLogLevel(logLevel string) (slog.Level, error) {
-	logLevel = strings.TrimSpace(strings.ToLower(logLevel))
-
-	if logLevel == "" {
-		return slog.LevelInfo, nil
-	}
-
-	switch logLevel {
-	case "debug":
-		return slog.LevelDebug, nil
-	case "info":
-		return slog.LevelInfo, nil
-	case "warn":
-		return slog.LevelWarn, nil
-	case "error":
-		return slog.LevelError, nil
-	default:
-		return slog.LevelInfo, fmt.Errorf("unsupported log_level %q", logLevel)
-	}
+	return authapp.ParseLogLevel(logLevel)
 }
 
 func getenv(key, fallback string) string {

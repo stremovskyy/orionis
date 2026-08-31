@@ -31,7 +31,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/stremovskyy/orionis/server"
 )
@@ -68,56 +67,118 @@ type EndpointRateLimitConfig struct {
 	Enabled *bool  `json:"enabled,omitempty"`
 	Limit   int    `json:"limit,omitempty"`
 	Window  string `json:"window,omitempty"`
+
+	limitSet  bool
+	windowSet bool
 }
 
 type AuditLogConfig struct {
 	Enabled *bool `json:"enabled,omitempty"`
 }
 
+// wireConfig preserves presence for signing-mode and rate-limit fields whose
+// omitted values have compatibility defaults.
+type wireConfig struct {
+	Listen         string          `json:"listen"`
+	LogLevel       string          `json:"log_level"`
+	Issuer         string          `json:"issuer"`
+	BasePath       string          `json:"base_path,omitempty"`
+	AccessTokenTTL string          `json:"access_token_ttl"`
+	ActiveKID      string          `json:"active_kid,omitempty"`
+	Key            *KeyConfig      `json:"key"`
+	Keys           *[]KeyConfig    `json:"keys,omitempty"`
+	RateLimits     wireRateLimits  `json:"rate_limits,omitempty"`
+	AuditLogs      AuditLogConfig  `json:"audit_logs,omitempty"`
+	Clients        []server.Client `json:"clients"`
+}
+
+type wireRateLimits struct {
+	Token  wireEndpointRateLimit `json:"token,omitempty"`
+	Readyz wireEndpointRateLimit `json:"readyz,omitempty"`
+}
+
+type wireEndpointRateLimit struct {
+	Enabled *bool   `json:"enabled,omitempty"`
+	Limit   *int    `json:"limit,omitempty"`
+	Window  *string `json:"window,omitempty"`
+}
+
+func (w wireRateLimits) runtimeConfig() RateLimitsConfig {
+	return RateLimitsConfig{
+		Token:  w.Token.runtimeConfig(),
+		Readyz: w.Readyz.runtimeConfig(),
+	}
+}
+
+func (w wireEndpointRateLimit) runtimeConfig() EndpointRateLimitConfig {
+	cfg := EndpointRateLimitConfig{Enabled: w.Enabled}
+
+	if w.Limit != nil {
+		cfg.Limit = *w.Limit
+		cfg.limitSet = true
+	}
+
+	if w.Window != nil {
+		cfg.Window = *w.Window
+		cfg.windowSet = true
+	}
+
+	return cfg
+}
+
+func (w wireConfig) runtimeConfig() Config {
+	cfg := Config{
+		Listen:         w.Listen,
+		LogLevel:       w.LogLevel,
+		Issuer:         w.Issuer,
+		BasePath:       w.BasePath,
+		AccessTokenTTL: w.AccessTokenTTL,
+		ActiveKID:      w.ActiveKID,
+		RateLimits:     w.RateLimits.runtimeConfig(),
+		AuditLogs:      w.AuditLogs,
+		Clients:        w.Clients,
+		legacyKeySet:   w.Key != nil,
+		keysSet:        w.Keys != nil,
+	}
+
+	if w.Key != nil {
+		cfg.Key = *w.Key
+	}
+
+	if w.Keys != nil {
+		cfg.Keys = append([]KeyConfig(nil), (*w.Keys)...)
+	}
+
+	return cfg
+}
+
 func LoadConfig(path string) (Config, error) {
 	var cfg Config
 
-	if path == "" {
+	if strings.TrimSpace(path) == "" {
 		return cfg, errors.New("config path is required")
 	}
 
-	raw, err := os.ReadFile(expandPath(path))
+	resolvedPath := expandPath(path)
+	raw, err := os.ReadFile(resolvedPath)
+	if err != nil {
+		return cfg, fmt.Errorf("read config %q: %w", resolvedPath, err)
+	}
+
+	var wire wireConfig
+
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		return cfg, fmt.Errorf("decode config %q: %w", resolvedPath, err)
+	}
+
+	cfg = wire.runtimeConfig()
+
+	resolved, err := compileConfig(cfg)
 	if err != nil {
 		return cfg, err
 	}
 
-	if err := json.Unmarshal(raw, &cfg); err != nil {
-		return cfg, err
-	}
-
-	var fields map[string]json.RawMessage
-
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return cfg, err
-	}
-
-	cfg.legacyKeySet = jsonFieldSet(fields, "key")
-	cfg.keysSet = jsonFieldSet(fields, "keys")
-
-	if strings.TrimSpace(cfg.Issuer) == "" {
-		return cfg, errors.New("issuer is required")
-	}
-
-	if len(cfg.Clients) == 0 {
-		return cfg, errors.New("at least one client is required")
-	}
-
-	for i, client := range cfg.Clients {
-		if err := client.ValidateScopePolicy(); err != nil {
-			return cfg, fmt.Errorf("clients[%d]: %w", i, err)
-		}
-	}
-
-	if err := validateSigningConfig(cfg); err != nil {
-		return cfg, err
-	}
-
-	return cfg, nil
+	return resolved.raw, nil
 }
 
 func (c Config) ListenAddr() string {
@@ -125,84 +186,7 @@ func (c Config) ListenAddr() string {
 		return ":8080"
 	}
 
-	return c.Listen
-}
-
-func validateSigningConfig(cfg Config) error {
-	if cfg.legacyKeySet && cfg.keysSet {
-		return errors.New("key and keys are mutually exclusive")
-	}
-
-	activeKID := strings.TrimSpace(cfg.ActiveKID)
-
-	if cfg.keysSet || len(cfg.Keys) > 0 {
-		if len(cfg.Keys) == 0 {
-			return errors.New("keys must contain at least one signing key")
-		}
-
-		seen := make(map[string]struct{}, len(cfg.Keys))
-
-		for i, key := range cfg.Keys {
-			kid := strings.TrimSpace(key.KID)
-
-			if kid == "" {
-				return fmt.Errorf("keys[%d].kid is required", i)
-			}
-
-			if _, ok := seen[kid]; ok {
-				return fmt.Errorf("duplicate signing kid %q", kid)
-			}
-
-			seen[kid] = struct{}{}
-		}
-
-		if activeKID != "" {
-			if _, ok := seen[activeKID]; !ok {
-				return fmt.Errorf("active_kid %q does not match a configured signing key", activeKID)
-			}
-		}
-
-		return nil
-	}
-
-	if activeKID != "" && activeKID != legacyKeyID(cfg.Key) {
-		return fmt.Errorf("active_kid %q does not match the configured signing key", activeKID)
-	}
-
-	return nil
-}
-
-func jsonFieldSet(fields map[string]json.RawMessage, key string) bool {
-	raw, ok := fields[key]
-
-	if !ok {
-		return false
-	}
-
-	value := strings.TrimSpace(string(raw))
-
-	return value != "" && value != "null"
-}
-
-func legacyKeyID(cfg KeyConfig) string {
-	if kid := strings.TrimSpace(cfg.KID); kid != "" {
-		return kid
-	}
-
-	return "orionis-ed25519-1"
-}
-
-func parseDurationDefault(value string, fallback time.Duration) (time.Duration, error) {
-	if strings.TrimSpace(value) == "" {
-		return fallback, nil
-	}
-
-	d, err := time.ParseDuration(value)
-	if err != nil {
-		return 0, fmt.Errorf("%q: %w", value, err)
-	}
-
-	return d, nil
+	return strings.TrimSpace(c.Listen)
 }
 
 func expandPath(path string) string {

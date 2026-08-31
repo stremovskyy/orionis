@@ -29,15 +29,12 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/stremovskyy/orionis/jwk"
 	"github.com/stremovskyy/orionis/server"
 )
 
-type SignerLoader interface {
-	LoadSigner(KeyConfig) (server.Signer, error)
-}
+type signerLoader func(KeyConfig) (server.Signer, error)
 
 type Ed25519SignerLoader struct{}
 
@@ -65,23 +62,18 @@ func (Ed25519SignerLoader) LoadSigner(cfg KeyConfig) (server.Signer, error) {
 	return jwk.LoadEd25519SignerPEM([]byte(raw), cfg.KID)
 }
 
-func buildServer(cfg Config, loader SignerLoader) (*server.Server, []server.Signer, error) {
-	ttl, err := parseDurationDefault(cfg.AccessTokenTTL, 15*time.Minute)
-	if err != nil {
-		return nil, nil, fmt.Errorf("parse access token ttl: %w", err)
-	}
-
-	signers, err := loadSigningKeys(cfg, loader)
+func buildServer(cfg resolvedConfig, loadSigner signerLoader) (*server.Server, []server.Signer, error) {
+	signers, err := loadSigningKeys(cfg.raw, loadSigner)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load signing keys: %w", err)
 	}
 
 	auth, err := server.New().
-		Issuer(cfg.Issuer).
-		AccessTokenTTL(ttl).
+		Issuer(cfg.raw.Issuer).
+		AccessTokenTTL(cfg.accessTokenTTL).
 		Signers(signers...).
-		ActiveKID(cfg.ActiveKID).
-		Clients(cfg.Clients...).
+		ActiveKID(cfg.raw.ActiveKID).
+		Clients(cfg.raw.Clients...).
 		Build()
 	if err != nil {
 		return nil, nil, err
@@ -90,29 +82,28 @@ func buildServer(cfg Config, loader SignerLoader) (*server.Server, []server.Sign
 	return auth, signers, nil
 }
 
-func loadSigningKeys(cfg Config, loader SignerLoader) ([]server.Signer, error) {
-	if loader == nil {
-		loader = Ed25519SignerLoader{}
+func loadSigningKeys(cfg Config, loadSigner signerLoader) ([]server.Signer, error) {
+	if loadSigner == nil {
+		loadSigner = Ed25519SignerLoader{}.LoadSigner
 	}
 
-	keyConfigs := cfg.Keys
-
-	if !cfg.keysSet && len(cfg.Keys) == 0 {
-		keyConfigs = []KeyConfig{cfg.Key}
-	}
-
+	keyConfigs := effectiveKeyConfigs(cfg)
 	signers := make([]server.Signer, 0, len(keyConfigs))
 	seen := make(map[string]struct{}, len(keyConfigs))
 
 	for _, key := range keyConfigs {
-		signer, err := loader.LoadSigner(key)
+		signer, err := loadSigner(key)
 		if err != nil {
 			return nil, err
 		}
 
-		kid := signer.KeyID()
+		if signer == nil {
+			return nil, errors.New("signer loader returned nil signer")
+		}
 
-		if _, ok := seen[kid]; ok {
+		kid := strings.TrimSpace(signer.KeyID())
+
+		if _, exists := seen[kid]; exists {
 			return nil, fmt.Errorf("duplicate signing kid %q", kid)
 		}
 
@@ -121,7 +112,7 @@ func loadSigningKeys(cfg Config, loader SignerLoader) ([]server.Signer, error) {
 	}
 
 	if cfg.ActiveKID != "" {
-		if _, ok := seen[cfg.ActiveKID]; !ok {
+		if _, exists := seen[cfg.ActiveKID]; !exists {
 			return nil, fmt.Errorf("active_kid %q does not match a loaded signing key", cfg.ActiveKID)
 		}
 	}
@@ -130,8 +121,8 @@ func loadSigningKeys(cfg Config, loader SignerLoader) ([]server.Signer, error) {
 }
 
 func effectiveActiveKID(activeKID string, signers []server.Signer) string {
-	if strings.TrimSpace(activeKID) != "" {
-		return strings.TrimSpace(activeKID)
+	if activeKID = strings.TrimSpace(activeKID); activeKID != "" {
+		return activeKID
 	}
 
 	if len(signers) == 0 || signers[0] == nil {

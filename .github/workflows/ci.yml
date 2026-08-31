@@ -6,6 +6,9 @@ on:
       - main
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Test and scan
@@ -13,39 +16,18 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
           cache: true
 
-      - name: Install analysis tools
-        run: |
-          go install honnef.co/go/tools/cmd/staticcheck@latest
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-
-      - name: Run tests
-        run: go test ./...
-
-      - name: Run race tests
-        run: go test -race ./...
-
-      - name: Run go vet
-        run: go vet ./...
-
-      - name: Run staticcheck
-        run: staticcheck ./...
-
-      - name: Run govulncheck
-        run: govulncheck ./...
-
-      - name: Build auth image
-        run: docker build --build-arg TARGET=./cmd/orionis-auth -t orionis-auth:ci -t stremovskyy/orionis:ci .
-
-      - name: Smoke auth image
-        run: scripts/smoke-release-image.sh stremovskyy/orionis:ci
-
-      - name: Build Compose stack
-        run: docker compose build
+      - name: Verify release contracts
+        env:
+          ORIONIS_VERIFY_IMAGE: stremovskyy/orionis:ci
+        run: make verify

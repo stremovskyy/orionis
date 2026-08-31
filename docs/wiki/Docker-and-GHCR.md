@@ -5,7 +5,7 @@ Orionis publishes the same auth-server image to Docker Hub and GitHub Container 
 ## Docker Hub
 
 ```bash
-docker pull stremovskyy/orionis:0.3.1
+docker pull stremovskyy/orionis:0.4.0
 ```
 
 ```bash
@@ -16,13 +16,13 @@ docker run --rm -d \
   -p 8080:8080 \
   -v "$PWD/config:/app/config:ro" \
   -v orionis-var:/app/var \
-  stremovskyy/orionis:0.3.1
+  stremovskyy/orionis:0.4.0
 ```
 
 ## GitHub Container Registry
 
 ```bash
-docker pull ghcr.io/stremovskyy/orionis:0.3.1
+docker pull ghcr.io/stremovskyy/orionis:0.4.0
 ```
 
 ```bash
@@ -33,7 +33,7 @@ docker run --rm -d \
   -p 8080:8080 \
   -v "$PWD/config:/app/config:ro" \
   -v orionis-var:/app/var \
-  ghcr.io/stremovskyy/orionis:0.3.1
+  ghcr.io/stremovskyy/orionis:0.4.0
 ```
 
 ## Pinned release
@@ -41,8 +41,8 @@ docker run --rm -d \
 Prefer a pinned tag for shared environments:
 
 ```bash
-docker pull stremovskyy/orionis:0.3.1
-docker pull ghcr.io/stremovskyy/orionis:0.3.1
+docker pull stremovskyy/orionis:0.4.0
+docker pull ghcr.io/stremovskyy/orionis:0.4.0
 ```
 
 ## AWS ECS Fargate
@@ -51,7 +51,7 @@ Use `deploy/aws/ecs/` from the repository to deploy the public image on ECS Farg
 
 The task definition template uses:
 
-- `stremovskyy/orionis:0.3.1`
+- `stremovskyy/orionis:0.4.0`
 - `awsvpc` networking
 - AWS Secrets Manager for `ORIONIS_CONFIG_JSON`
 - AWS Secrets Manager secret injection for `ORIONIS_SIGNING_KEY_PEM` and `ORIONIS_SIGNING_KEY_PEM_OLD`

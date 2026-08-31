@@ -43,6 +43,7 @@ GET  /.well-known/jwks.json
 GET  /.well-known/openid-configuration
 GET  /healthz
 GET  /readyz</code></pre>
+      <p>Health and readiness currently share the same payload because startup validates and loads all runtime dependencies before routes are mounted.</p>
     </main>
   </body>
 </html>

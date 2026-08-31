@@ -4,3 +4,4 @@
 *.crt
 .idea/
 .DS_Store
+.tools/

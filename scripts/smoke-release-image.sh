@@ -78,9 +78,28 @@ curl -fsS "$base_url/healthz" >/dev/null
 curl -fsS "$base_url/readyz" >/dev/null
 
 jwks_file="$tmpdir/jwks.json"
+discovery_file="$tmpdir/discovery.json"
 token_file="$tmpdir/token.json"
 
 curl -fsS "$base_url/.well-known/jwks.json" > "$jwks_file"
+curl -fsS "$base_url/.well-known/openid-configuration" > "$discovery_file"
+python3 - "$discovery_file" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as fh:
+    discovery = json.load(fh)
+
+expected = {
+    "issuer": "http://localhost:8080",
+    "token_endpoint": "http://localhost:8080/oauth/token",
+    "jwks_uri": "http://localhost:8080/.well-known/jwks.json",
+}
+for field, value in expected.items():
+    if discovery.get(field) != value:
+        raise SystemExit(f"unexpected {field}: {discovery.get(field)!r}")
+PY
+
 python3 - "$jwks_file" <<'PY'
 import json
 import sys

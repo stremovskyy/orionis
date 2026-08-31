@@ -1,6 +1,6 @@
 services:
   orionis-auth:
-    image: stremovskyy/orionis:${ORIONIS_IMAGE_TAG:-0.3.2}
+    image: stremovskyy/orionis:${ORIONIS_IMAGE_TAG:-0.4.0}
     restart: unless-stopped
     ports:
       - "${ORIONIS_AUTH_PORT:-8080}:8080"

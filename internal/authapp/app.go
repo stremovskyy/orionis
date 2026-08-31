@@ -25,36 +25,72 @@
 package authapp
 
 import (
+	"errors"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/stremovskyy/orionis/server"
 )
 
 type Runtime struct {
-	cfg     Config
+	cfg     resolvedConfig
 	auth    *server.Server
 	signers []server.Signer
 }
 
 func New(cfg Config) (*Runtime, error) {
-	return NewWithSignerLoader(cfg, Ed25519SignerLoader{})
-}
-
-func NewWithSignerLoader(cfg Config, loader SignerLoader) (*Runtime, error) {
-	auth, signers, err := buildServer(cfg, loader)
+	resolved, err := resolveConfig(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Runtime{cfg: cfg, auth: auth, signers: signers}, nil
+	return newRuntime(resolved, Ed25519SignerLoader{}.LoadSigner)
+}
+
+// SignerLoader is retained for internal source compatibility.
+// Deprecated: inject a signer-loading function through newWithSignerLoader.
+type SignerLoader interface {
+	LoadSigner(KeyConfig) (server.Signer, error)
+}
+
+func NewWithSignerLoader(cfg Config, loader SignerLoader) (*Runtime, error) {
+	if loader == nil {
+		return nil, errors.New("signer loader is required")
+	}
+
+	return newWithSignerLoader(cfg, loader.LoadSigner)
+}
+
+func newWithSignerLoader(cfg Config, loadSigner signerLoader) (*Runtime, error) {
+	resolved, err := compileConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return newRuntime(resolved, loadSigner)
+}
+
+func newRuntime(resolved resolvedConfig, loadSigner signerLoader) (*Runtime, error) {
+	auth, signers, err := buildServer(resolved, loadSigner)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Runtime{cfg: resolved, auth: auth, signers: signers}, nil
 }
 
 func (r *Runtime) Mount(routes *gin.Engine) error {
-	return mountAuthRoutes(routes, r.auth, r.cfg)
+	if r == nil || routes == nil {
+		return errors.New("auth runtime and routes are required")
+	}
+
+	mountAuthRoutes(routes, r.auth, r.cfg)
+
+	return nil
 }
 
 func (r *Runtime) ActiveKID() string {
-	return effectiveActiveKID(r.cfg.ActiveKID, r.signers)
+	return effectiveActiveKID(r.cfg.raw.ActiveKID, r.signers)
 }
 
 func (r *Runtime) SignerCount() int {

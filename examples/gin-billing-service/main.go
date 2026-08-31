@@ -25,6 +25,7 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -35,6 +36,13 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		slog.Error("billing demo stopped", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	issuer := getenv("ORIONIS_ISSUER", "http://localhost:8080")
 	jwksURL := getenv("ORIONIS_JWKS_URL", issuer+"/.well-known/jwks.json")
 	audience := getenv("ORIONIS_AUDIENCE", "billing-api")
@@ -45,8 +53,7 @@ func main() {
 		JWKS(jwksURL).
 		Build()
 	if err != nil {
-		slog.Error("create auth guard", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("create auth guard: %w", err)
 	}
 
 	r := gin.Default()
@@ -83,10 +90,7 @@ func main() {
 	listen := getenv("BILLING_LISTEN", ":8081")
 	slog.Info("billing demo started", "listen", listen, "issuer", issuer, "audience", audience)
 
-	if err := r.Run(listen); err != nil {
-		slog.Error("billing demo stopped", "error", err)
-		os.Exit(1)
-	}
+	return r.Run(listen)
 }
 
 func getenv(key, fallback string) string {
