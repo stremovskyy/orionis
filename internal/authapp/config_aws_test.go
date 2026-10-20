@@ -16,7 +16,7 @@ import (
 )
 
 const awsTestConfig = `{
-	"issuer": "https://auth.orionis.test/auth",
+	"issuer": "https://auth.example.test/auth",
 	"base_path": "/auth",
 	"key": {"kid": "production-key", "private_key_pem_env": "ORIONIS_SIGNING_KEY_PEM"},
 	"clients": [{"id": "orders-service", "secrets": ["test-secret"],
@@ -38,6 +38,8 @@ func TestLoadConfigContextUsesConfuciusAppConfig(t *testing.T) {
 	t.Setenv("AWS_SESSION_TOKEN", "")
 	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
 	var sessions, reads atomic.Int32
+	var payload atomic.Value
+	payload.Store(awsTestConfig)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/configurationsessions":
@@ -69,7 +71,7 @@ func TestLoadConfigContextUsesConfuciusAppConfig(t *testing.T) {
 
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Next-Poll-Configuration-Token", "next-token")
-			_, _ = w.Write([]byte(awsTestConfig))
+			_, _ = w.Write([]byte(payload.Load().(string)))
 
 		default:
 			http.NotFound(w, r)
@@ -99,6 +101,21 @@ func TestLoadConfigContextUsesConfuciusAppConfig(t *testing.T) {
 
 	if sessions.Load() != 1 || reads.Load() != 1 {
 		t.Fatalf("want one startup fetch; sessions=%d reads=%d", sessions.Load(), reads.Load())
+	}
+
+	for _, trailing := range []string{"{}", "null", "[]"} {
+		t.Run("trailing "+trailing, func(t *testing.T) {
+			document := awsTestConfig + "\n" + trailing
+			payload.Store(document)
+
+			if _, err := LoadConfig(writeConfig(t, document)); err == nil {
+				t.Fatal("local JSON accepted a trailing document")
+			}
+
+			if _, err := LoadConfigContext(context.Background(), "aws"); err == nil {
+				t.Fatal("AppConfig JSON accepted a trailing document")
+			}
+		})
 	}
 }
 

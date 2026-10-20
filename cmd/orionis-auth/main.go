@@ -31,6 +31,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/gin-gonic/gin"
@@ -73,6 +74,10 @@ func run(parent context.Context, args []string) error {
 
 	runtime, err := authapp.New(cfg)
 	if err != nil {
+		if strings.EqualFold(strings.TrimSpace(*cfgPath), "aws") {
+			return errors.New("initialize auth runtime: AWS AppConfig configuration could not be initialized")
+		}
+
 		return err
 	}
 
