@@ -6,7 +6,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 BASE_REF=${ORIONIS_API_BASE_REF:-v0.3.2}
 MODULE=github.com/stremovskyy/orionis
 APIDIFF=${APIDIFF:-apidiff}
-GOTOOLCHAIN=go$(awk '/^go / { print $2; exit }' "$ROOT/go.mod")
+GOTOOLCHAIN=$(awk '/^go / { version = "go" $2 } /^toolchain / { version = $2 } END { print version }' "$ROOT/go.mod")
 export GOTOOLCHAIN
 TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/orionis-apidiff.XXXXXX")
 OLD_WORKTREE="$TMP_DIR/old"

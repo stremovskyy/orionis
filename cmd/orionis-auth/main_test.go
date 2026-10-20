@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -39,6 +41,57 @@ func TestRunHelpExitsSuccessfully(t *testing.T) {
 
 	if err := run(context.Background(), []string{"-h"}); err != nil {
 		t.Fatalf("run(-h) = %v, want nil", err)
+	}
+}
+
+func TestRunRedactsHostedSigningInitializationErrors(t *testing.T) {
+	const marker = "UNSET_HOSTED_KEY_REFERENCE"
+	const document = `{
+		"issuer":"https://auth.example.test",
+		"key":{"kid":"test-key","private_key_pem_env":"` + marker + `"},
+		"clients":[{"id":"test-client","secrets":["test-secret"],
+		"allowed_audiences":["test-api"],"allowed_scopes":["test.read"]}]
+	}`
+	t.Setenv(marker, "")
+	t.Setenv("AWS_REGION", "eu-central-1")
+	t.Setenv("AWS_APPCONFIG_APPLICATION", "test-app")
+	t.Setenv("AWS_APPCONFIG_ENVIRONMENT", "test-env")
+	t.Setenv("AWS_APPCONFIG_PROFILE", "test-profile")
+	t.Setenv("AWS_ACCESS_KEY_ID", "test-access-key")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test-secret-key")
+	t.Setenv("AWS_SESSION_TOKEN", "")
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == "/configurationsessions" {
+			_, _ = w.Write([]byte(`{"InitialConfigurationToken":"test-token"}`))
+
+			return
+		}
+
+		_, _ = w.Write([]byte(document))
+	}))
+	defer srv.Close()
+
+	t.Setenv("AWS_ENDPOINT_URL_APPCONFIGDATA", srv.URL)
+
+	err := run(context.Background(), []string{"-config", "aws"})
+
+	if err == nil || !strings.Contains(err.Error(), "AppConfig") || strings.Contains(err.Error(), marker) {
+		t.Fatalf("hosted signing initialization error was not redacted: %v", err)
+	}
+
+	path := filepath.Join(t.TempDir(), "config.json")
+
+	if err := os.WriteFile(path, []byte(document), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err = run(context.Background(), []string{"-config", path})
+
+	if err == nil || !strings.Contains(err.Error(), marker) {
+		t.Fatalf("local signing initialization must retain detailed diagnostics: %v", err)
 	}
 }
 

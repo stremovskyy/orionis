@@ -4,8 +4,8 @@ JAVA_BUILD_DIR ?= /tmp/orionis-java-orders-client
 JAVAC ?= javac
 JAVA ?= java
 PHP ?= php
-GO_TOOLCHAIN ?= go$(shell awk '/^go / { print $$2; exit }' go.mod)
-FORMAT_TOOLCHAIN ?= go1.26.7
+GO_TOOLCHAIN ?= $(shell awk '/^go / { version = "go" $$2 } /^toolchain / { version = $$2 } END { print version }' go.mod)
+FORMAT_TOOLCHAIN ?= go1.26.10
 TOOLS_BIN ?= $(CURDIR)/.tools/bin
 
 tools:

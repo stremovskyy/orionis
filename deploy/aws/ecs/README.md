@@ -5,87 +5,83 @@ This directory contains templates for running the published Orionis auth-server 
 The default image is Docker Hub:
 
 ```text
-stremovskyy/orionis:0.4.0
+stremovskyy/orionis:0.5.0
 ```
 
 You can replace it with the equivalent GHCR image:
 
 ```text
-ghcr.io/stremovskyy/orionis:0.4.0
+ghcr.io/stremovskyy/orionis:0.5.0
 ```
 
 ## Runtime model
 
-- Fargate task with `awsvpc` networking.
-- Public container image, so no `repositoryCredentials` are required.
-- `ORIONIS_CONFIG_JSON` comes from AWS Secrets Manager.
-- `ORIONIS_SIGNING_KEY_PEM` and optional `ORIONIS_SIGNING_KEY_PEM_OLD` come from AWS Secrets Manager.
-- The task writes that secret to `/tmp/orionis.json` and starts `/usr/local/bin/orionis -config /tmp/orionis.json`.
-- The Orionis process reads Ed25519 signing keys from PEM environment variables; it does not use an AWS SDK or write keys to `/app/var`.
+- Fargate starts `/usr/local/bin/orionis -config aws` directly.
+- Confucius v1.4.1 reads the hosted AppConfig JSON once during startup, with a
+  30-second deadline. There is no background poller or fallback configuration.
+- `AWS_APPCONFIG_APPLICATION`, `AWS_APPCONFIG_ENVIRONMENT`, and
+  `AWS_APPCONFIG_PROFILE` must identify the deployed configuration. `AWS_REGION`
+  falls back to `AWS_DEFAULT_REGION`, then `eu-central-1`.
+- Signing-key PEMs remain in Secrets Manager. ECS injects
+  `ORIONIS_SIGNING_KEY_PEM` and, during rotation, `ORIONIS_SIGNING_KEY_PEM_OLD`.
+  AppConfig contains only their `private_key_pem_env` references.
+- Local JSON configuration with `-config path/to/config.json` remains supported.
 
-## Required AWS resources
+## Prepare AppConfig
 
-- ECS cluster and service.
-- Task execution role with permissions for CloudWatch Logs and `secretsmanager:GetSecretValue` on the Orionis config and signing-key secrets.
-- CloudWatch log group.
-- Secrets Manager secret containing the full Orionis JSON config.
-- Secrets Manager secrets containing the active Ed25519 PKCS8 PEM signing key and, during rotation, the previous signing key.
-- Security group and private subnets for the task.
-- Optional load balancer or service discovery target for port `8080`.
-
-## Prepare config
-
-Create active and previous Ed25519 signing keys as PKCS8 PEM and store them in Secrets Manager.
-The checked-in example config uses both env vars so the task definition can smoke-test rotation
-without changing the JSON shape later:
+Create an application, environment, and hosted freeform configuration profile,
+following the names used by the other services:
 
 ```bash
-openssl genpkey -algorithm ED25519 > /tmp/orionis-ed25519.pem
-openssl genpkey -algorithm ED25519 > /tmp/orionis-ed25519-old.pem
-
-aws secretsmanager create-secret \
-  --name orionis/signing-key \
-  --secret-string file:///tmp/orionis-ed25519.pem
-
-aws secretsmanager create-secret \
-  --name orionis/signing-key-old \
-  --secret-string file:///tmp/orionis-ed25519-old.pem
+aws appconfig create-application --name Orionis
+aws appconfig create-environment --application-id "$ORIONIS_APPCONFIG_APPLICATION" --name Production
+aws appconfig create-configuration-profile \
+  --application-id "$ORIONIS_APPCONFIG_APPLICATION" \
+  --name main-config --location-uri hosted --type AWS.Freeform
 ```
 
-Copy `orionis-config.example.json`, replace placeholders, and store the full JSON as the config secret.
-The example config publishes both keys through `keys`, and `active_kid` selects the signer for new tokens.
-Set `base_path` only when Orionis is served behind a path prefix, for example
-`"issuer": "https://auth.example.internal/auth"` with `"base_path": "/auth"`.
+Copy `orionis-config.example.json` and replace its placeholders. Store only client
+SHA-256 digests, never plaintext credentials. Keep the active and overlapping
+signing keys in Secrets Manager as PKCS8 PEM, referenced by environment name in
+JSON. For a single signing key, omit the old key from both JSON and the task
+secret mappings. For an existing deployment, preserve its issuer, base path,
+clients, audiences, scopes, TTL, key IDs, and key secret ARN exactly.
+
+Upload the completed JSON and activate the returned version:
 
 ```bash
-aws secretsmanager create-secret \
-  --name orionis/config \
-  --secret-string file://deploy/aws/ecs/orionis-config.example.json
+aws appconfig create-hosted-configuration-version \
+  --application-id "$ORIONIS_APPCONFIG_APPLICATION" \
+  --configuration-profile-id "$ORIONIS_APPCONFIG_PROFILE" \
+  --content-type application/json --content fileb:///tmp/orionis-config.json \
+  /tmp/orionis-upload-response.json
+aws appconfig start-deployment \
+  --application-id "$ORIONIS_APPCONFIG_APPLICATION" \
+  --environment-id "$ORIONIS_APPCONFIG_ENVIRONMENT" \
+  --configuration-profile-id "$ORIONIS_APPCONFIG_PROFILE" \
+  --configuration-version "$ORIONIS_APPCONFIG_VERSION" \
+  --deployment-strategy-id AppConfig.AllAtOnce
 ```
 
-If you update either secret later, force a new ECS deployment so new tasks receive the latest value.
+Wait for AppConfig deployment state `COMPLETE` before starting new tasks. Future
+configuration changes also require rolling task replacement after deployment.
 
 ## IAM permissions
 
-Grant the task execution role access to the config secret and both signing-key secrets:
+The **task execution role** needs CloudWatch Logs permissions and
+`secretsmanager:GetSecretValue` on the signing-key secrets for ECS injection.
+The **task role**, used by Confucius inside the container, needs:
 
-```bash
-aws iam put-role-policy \
-  --role-name "$ORIONIS_EXECUTION_ROLE_NAME" \
-  --policy-name OrionisRuntimeSecretsRead \
-  --policy-document '{
-    "Version": "2012-10-17",
-    "Statement": [{
-      "Effect": "Allow",
-      "Action": "secretsmanager:GetSecretValue",
-      "Resource": [
-        "'"$ORIONIS_CONFIG_SECRET_ARN"'",
-        "'"$ORIONIS_SIGNING_KEY_SECRET_ARN"'",
-        "'"$ORIONIS_OLD_SIGNING_KEY_SECRET_ARN"'"
-      ]
-    }]
-  }'
+```json
+{
+  "Effect": "Allow",
+  "Action": ["appconfig:StartConfigurationSession", "appconfig:GetLatestConfiguration"],
+  "Resource": "arn:aws:appconfig:<REGION>:<ACCOUNT>:application/<APP>/environment/<ENV>/configuration/<PROFILE>"
+}
 ```
+
+Keep these runtime permissions on the task role even when it differs from the
+execution role. No config secret is injected into the new task.
 
 ## Render and register the task definition
 
@@ -96,7 +92,9 @@ export AWS_REGION=us-east-1
 export ORIONIS_EXECUTION_ROLE_ARN="<TASK_EXECUTION_ROLE_ARN>"
 export ORIONIS_EXECUTION_ROLE_NAME="<TASK_EXECUTION_ROLE_NAME>"
 export ORIONIS_TASK_ROLE_ARN="<TASK_ROLE_ARN>"
-export ORIONIS_CONFIG_SECRET_ARN="<SECRETS_MANAGER_CONFIG_SECRET_ARN>"
+export ORIONIS_APPCONFIG_APPLICATION="<APPLICATION_ID>"
+export ORIONIS_APPCONFIG_ENVIRONMENT="<ENVIRONMENT_ID>"
+export ORIONIS_APPCONFIG_PROFILE="<CONFIGURATION_PROFILE_ID>"
 export ORIONIS_SIGNING_KEY_SECRET_ARN="<SECRETS_MANAGER_SIGNING_KEY_SECRET_ARN>"
 export ORIONIS_OLD_SIGNING_KEY_SECRET_ARN="<SECRETS_MANAGER_OLD_SIGNING_KEY_SECRET_ARN>"
 export ORIONIS_LOG_GROUP="/ecs/orionis-auth"
@@ -150,6 +148,7 @@ aws ecs update-service \
   --cluster "$ORIONIS_ECS_CLUSTER" \
   --service "$ORIONIS_ECS_SERVICE" \
   --task-definition orionis-auth \
+  --deployment-configuration 'minimumHealthyPercent=100,maximumPercent=200,deploymentCircuitBreaker={enable=true,rollback=true}' \
   --force-new-deployment
 ```
 
@@ -175,3 +174,21 @@ Expected response:
 ```json
 {"service":"orionis-auth","status":"ok"}
 ```
+
+## Migrate and roll back
+
+Before migration, record the old task-definition ARN, image digest, config-secret
+version, JWKS, and a successful token/consumer validation. Copy the **active** config
+version exactly; do not activate unrelated prepared versions. Preserve signing
+key references. Validate the new image/configuration before service replacement.
+
+Use `minimumHealthyPercent=100` and `maximumPercent=200` so ECS starts a new task
+while the old task serves requests. Keep the deployment circuit breaker enabled.
+Monitor readiness, token issuance, JWT signature/claims, and a safe protected
+consumer request throughout replacement. Verify tokens issued before deployment
+remain valid after it and confirm the JWKS/key IDs have not changed.
+
+If startup or business-path checks fail, update the service back to the recorded
+old task-definition ARN. Retain the old config secret as the rollback source;
+do not delete it as part of migration. Do not rotate keys or change client grants
+in the configuration-source migration.
