@@ -53,7 +53,8 @@ Upload the completed JSON and activate the returned version:
 aws appconfig create-hosted-configuration-version \
   --application-id "$ORIONIS_APPCONFIG_APPLICATION" \
   --configuration-profile-id "$ORIONIS_APPCONFIG_PROFILE" \
-  --content-type application/json --content fileb:///tmp/orionis-config.json
+  --content-type application/json --content fileb:///tmp/orionis-config.json \
+  /tmp/orionis-upload-response.json
 aws appconfig start-deployment \
   --application-id "$ORIONIS_APPCONFIG_APPLICATION" \
   --environment-id "$ORIONIS_APPCONFIG_ENVIRONMENT" \
