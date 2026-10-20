@@ -3,7 +3,7 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-GOTOOLCHAIN=go$(awk '/^go / { print $2; exit }' "$ROOT/go.mod")
+GOTOOLCHAIN=$(awk '/^go / { version = "go" $2 } /^toolchain / { version = $2 } END { print version }' "$ROOT/go.mod")
 export GOTOOLCHAIN
 TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/orionis-examples.XXXXXX")
 

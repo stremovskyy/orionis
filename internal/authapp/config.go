@@ -25,6 +25,7 @@
 package authapp
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -153,6 +154,21 @@ func (w wireConfig) runtimeConfig() Config {
 }
 
 func LoadConfig(path string) (Config, error) {
+	return LoadConfigContext(context.Background(), path)
+}
+
+// LoadConfigContext reads a local JSON file or, with source "aws", one AppConfig
+// configuration through Confucius. Both sources use the same wire contract and
+// runtime validation. Configuration is loaded once at startup.
+func LoadConfigContext(ctx context.Context, source string) (Config, error) {
+	if strings.EqualFold(strings.TrimSpace(source), "aws") {
+		return loadAWSConfig(ctx, newAWSConfigLoader)
+	}
+
+	return loadFileConfig(source)
+}
+
+func loadFileConfig(path string) (Config, error) {
 	var cfg Config
 
 	if strings.TrimSpace(path) == "" {

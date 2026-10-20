@@ -13,12 +13,10 @@
   "containerDefinitions": [
     {
       "name": "orionis-auth",
-      "image": "stremovskyy/orionis:0.4.0",
+      "image": "stremovskyy/orionis:0.5.0",
       "essential": true,
-      "entryPoint": ["/bin/sh", "-c"],
-      "command": [
-        "printf '%s' \"$ORIONIS_CONFIG_JSON\" > /tmp/orionis.json && exec /usr/local/bin/orionis -config /tmp/orionis.json"
-      ],
+      "entryPoint": ["/usr/local/bin/orionis"],
+      "command": ["-config", "aws"],
       "portMappings": [
         {
           "containerPort": 8080,
@@ -30,13 +28,25 @@
         {
           "name": "GIN_MODE",
           "value": "release"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "${AWS_REGION}"
+        },
+        {
+          "name": "AWS_APPCONFIG_APPLICATION",
+          "value": "${ORIONIS_APPCONFIG_APPLICATION}"
+        },
+        {
+          "name": "AWS_APPCONFIG_ENVIRONMENT",
+          "value": "${ORIONIS_APPCONFIG_ENVIRONMENT}"
+        },
+        {
+          "name": "AWS_APPCONFIG_PROFILE",
+          "value": "${ORIONIS_APPCONFIG_PROFILE}"
         }
       ],
       "secrets": [
-        {
-          "name": "ORIONIS_CONFIG_JSON",
-          "valueFrom": "${ORIONIS_CONFIG_SECRET_ARN}"
-        },
         {
           "name": "ORIONIS_SIGNING_KEY_PEM",
           "valueFrom": "${ORIONIS_SIGNING_KEY_SECRET_ARN}"

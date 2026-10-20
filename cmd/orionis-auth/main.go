@@ -50,7 +50,7 @@ func run(parent context.Context, args []string) error {
 	cfgPath := flags.String(
 		"config",
 		getenv("ORIONIS_CONFIG", "config/orionis.example.json"),
-		"Path to Orionis JSON config",
+		"Path to Orionis JSON config, or aws for AWS AppConfig",
 	)
 
 	if err := flags.Parse(args); err != nil {
@@ -61,7 +61,7 @@ func run(parent context.Context, args []string) error {
 		return err
 	}
 
-	cfg, err := authapp.LoadConfig(*cfgPath)
+	cfg, err := authapp.LoadConfigContext(parent, *cfgPath)
 	if err != nil {
 		return err
 	}
@@ -84,6 +84,7 @@ func run(parent context.Context, args []string) error {
 
 	slog.Info(
 		"orionis auth server started",
+		"config_source", *cfgPath,
 		"listen", cfg.ListenAddr(),
 		"issuer", cfg.Issuer,
 		"active_kid", runtime.ActiveKID(),

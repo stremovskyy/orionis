@@ -5,7 +5,7 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 MIN_PACKAGE_COVERAGE=${MIN_PACKAGE_COVERAGE:-60}
 MIN_CORE_COVERAGE=${MIN_CORE_COVERAGE:-70}
-GOTOOLCHAIN=go$(awk '/^go / { print $2; exit }' "$ROOT/go.mod")
+GOTOOLCHAIN=$(awk '/^go / { version = "go" $2 } /^toolchain / { version = $2 } END { print version }' "$ROOT/go.mod")
 export GOTOOLCHAIN
 TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/orionis-coverage.XXXXXX")
 
