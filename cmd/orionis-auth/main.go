@@ -51,7 +51,7 @@ func run(parent context.Context, args []string) error {
 	cfgPath := flags.String(
 		"config",
 		getenv("ORIONIS_CONFIG", "config/orionis.example.json"),
-		"Path to Orionis JSON config, or aws for AWS AppConfig",
+		"Path to Orionis config (JSON/YAML detected automatically), or aws for AWS AppConfig",
 	)
 
 	if err := flags.Parse(args); err != nil {
