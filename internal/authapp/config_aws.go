@@ -2,7 +2,6 @@ package authapp
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -10,7 +9,6 @@ import (
 	"time"
 
 	"github.com/stremovskyy/confucius"
-	"github.com/stremovskyy/confucius/decoder"
 )
 
 const appConfigStartupTimeout = 30 * time.Second
@@ -29,20 +27,9 @@ type configLoader interface {
 func newAWSConfigLoader(options awsConfigOptions) configLoader {
 	return confucius.AWS().
 		WithRegion(options.region).
-		WithFormat("json").
 		AppConfig().
 		Loader(options.application, options.environment, options.profile).
-		WithDecoder(configJSONDecoder{})
-}
-
-// Keep identical whole-document JSON semantics for local and hosted config.
-// Confucius v1.4.1's decoder also accepts a second JSON value after the first.
-type configJSONDecoder struct{}
-
-func (configJSONDecoder) Name() string { return "json" }
-
-func (configJSONDecoder) Decode(data []byte, target any, _ decoder.DecodeOptions) error {
-	return json.Unmarshal(data, target)
+		WithDecoder(configDecoder{})
 }
 
 func awsConfigOptionsFromEnv() (awsConfigOptions, error) {

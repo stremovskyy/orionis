@@ -26,7 +26,6 @@ package authapp
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -157,9 +156,10 @@ func LoadConfig(path string) (Config, error) {
 	return LoadConfigContext(context.Background(), path)
 }
 
-// LoadConfigContext reads a local JSON file or, with source "aws", one AppConfig
-// configuration through Confucius. Both sources use the same wire contract and
-// runtime validation. Configuration is loaded once at startup.
+// LoadConfigContext reads a local JSON or YAML file or, with source "aws", one
+// AppConfig configuration through Confucius. The format is detected from content;
+// both formats use the same wire contract and runtime validation. Configuration
+// is loaded once at startup.
 func LoadConfigContext(ctx context.Context, source string) (Config, error) {
 	if strings.EqualFold(strings.TrimSpace(source), "aws") {
 		return loadAWSConfig(ctx, newAWSConfigLoader)
@@ -183,7 +183,7 @@ func loadFileConfig(path string) (Config, error) {
 
 	var wire wireConfig
 
-	if err := json.Unmarshal(raw, &wire); err != nil {
+	if err := decodeConfig(raw, &wire); err != nil {
 		return cfg, fmt.Errorf("decode config %q: %w", resolvedPath, err)
 	}
 

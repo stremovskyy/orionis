@@ -56,6 +56,7 @@ orionis/
   examples/java-orders-client/   Java calling-service example without Maven dependencies
   examples/php-orders-client/    PHP calling-service example without Composer dependencies
   config/orionis.example.json    Local development config
+  config/orionis.example.yaml    Equivalent YAML development config
   deploy/aws/ecs/                AWS ECS/Fargate task definition and guide
   docs/architecture.md           Architecture notes
   docs/wiki/                     GitHub Wiki source pages
@@ -79,6 +80,17 @@ Terminal 1: authorization server.
 cd ~/go/src/github.com/stremovskyy/orionis
 go run ./cmd/orionis-auth -config ./config/orionis.example.json
 ```
+
+YAML is also supported:
+
+```bash
+go run ./cmd/orionis-auth -config ./config/orionis.example.yaml
+```
+
+Local configuration is detected as JSON or YAML from its content, regardless of
+filename or extension. Both formats use the same fields and snake_case names,
+including duration strings such as `access_token_ttl: "15m"`, and the same runtime
+validation. YAML files must contain exactly one document. Docker examples use JSON.
 
 Terminal 2: protected billing service.
 
@@ -146,13 +158,13 @@ ORIONIS_SCOPE          default: billing.invoice.create
 Pull the published auth server image from Docker Hub:
 
 ```bash
-docker pull stremovskyy/orionis:0.5.0
+docker pull stremovskyy/orionis:0.6.0
 ```
 
 Or pull the GitHub Packages mirror from GitHub Container Registry:
 
 ```bash
-docker pull ghcr.io/stremovskyy/orionis:0.5.0
+docker pull ghcr.io/stremovskyy/orionis:0.6.0
 ```
 
 Run Orionis from the published image:
@@ -165,7 +177,7 @@ docker run --rm -d \
   -p 8080:8080 \
   -v "$PWD/config:/app/config:ro" \
   -v orionis-var:/app/var \
-  stremovskyy/orionis:0.5.0
+  stremovskyy/orionis:0.6.0
 ```
 
 Or use the release Compose file:
@@ -181,7 +193,7 @@ curl -fsS http://localhost:8080/readyz
 Pin a released image in deployed environments:
 
 ```bash
-ORIONIS_IMAGE_TAG=0.5.0 docker compose -f docker-compose.release.yml up -d
+ORIONIS_IMAGE_TAG=0.6.0 docker compose -f docker-compose.release.yml up -d
 ```
 
 The published image expects its config at `/app/config/orionis.json` by default.
@@ -193,21 +205,21 @@ injected secret environment variables instead.
 The GitHub Container Registry image uses the same tags as Docker Hub:
 
 ```bash
-docker pull ghcr.io/stremovskyy/orionis:0.5.0
+docker pull ghcr.io/stremovskyy/orionis:0.6.0
 
 docker run --rm -d \
   --name orionis-auth \
   -p 8080:8080 \
   -v "$PWD/config:/app/config:ro" \
   -v orionis-var:/app/var \
-  ghcr.io/stremovskyy/orionis:0.5.0
+  ghcr.io/stremovskyy/orionis:0.6.0
 ```
 
 ## Deploy on AWS ECS Fargate
 
 Use the templates in [`deploy/aws/ecs`](deploy/aws/ecs) to run the published image on ECS Fargate.
-The task definition uses `stremovskyy/orionis:0.5.0`, CloudWatch logs, health/readiness
-endpoints, and Confucius v1.4.1 to load JSON from AWS AppConfig at startup.
+The task definition uses `stremovskyy/orionis:0.6.0`, CloudWatch logs, health/readiness
+endpoints, and Confucius v1.4.1 to load configuration from AWS AppConfig at startup.
 Signing-key PEMs remain in AWS Secrets Manager and are injected through
 `ORIONIS_SIGNING_KEY_PEM` (and optionally `ORIONIS_SIGNING_KEY_PEM_OLD`).
 
@@ -220,16 +232,18 @@ AWS_APPCONFIG_ENVIRONMENT=<ENVIRONMENT_ID>
 AWS_APPCONFIG_PROFILE=<CONFIGURATION_PROFILE_ID>
 ```
 
-Publish the JSON configuration to a hosted AppConfig profile and deploy it to the
-selected environment before starting the ECS task. AppConfig stores the existing
-JSON shape, including `secret_sha256_hex` arrays and signing-key environment
+Publish JSON or YAML configuration to a hosted AppConfig profile and deploy it to
+the selected environment before starting the ECS task. The format is detected
+automatically from the content. Both formats use the same fields, including
+`secret_sha256_hex` arrays and signing-key environment
 references. Keep plaintext client credentials and signing-key PEMs outside AppConfig.
 
 Follow [`deploy/aws/ecs/README.md`](deploy/aws/ecs/README.md) for IAM permissions,
 configuration deployment, rolling migration, rollback, and verification. Local
-`-config path/to/orionis.json` remains supported. Both sources use the same runtime
-validation. AppConfig is fetched once with a 30-second startup deadline; activating
-a new AppConfig version requires rolling replacement of ECS tasks.
+`-config path/to/orionis.json` and `-config path/to/orionis.yaml` remain supported.
+Both sources use the same runtime validation. AppConfig is fetched once with a
+30-second startup deadline; activating a new AppConfig version requires rolling
+replacement of ECS tasks.
 
 Build the auth server image:
 

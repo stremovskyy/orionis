@@ -5,19 +5,19 @@ This directory contains templates for running the published Orionis auth-server 
 The default image is Docker Hub:
 
 ```text
-stremovskyy/orionis:0.5.0
+stremovskyy/orionis:0.6.0
 ```
 
 You can replace it with the equivalent GHCR image:
 
 ```text
-ghcr.io/stremovskyy/orionis:0.5.0
+ghcr.io/stremovskyy/orionis:0.6.0
 ```
 
 ## Runtime model
 
 - Fargate starts `/usr/local/bin/orionis -config aws` directly.
-- Confucius v1.4.1 reads the hosted AppConfig JSON once during startup, with a
+- Confucius v1.4.1 reads the hosted AppConfig configuration once during startup, with a
   30-second deadline. There is no background poller or fallback configuration.
 - `AWS_APPCONFIG_APPLICATION`, `AWS_APPCONFIG_ENVIRONMENT`, and
   `AWS_APPCONFIG_PROFILE` must identify the deployed configuration. `AWS_REGION`
@@ -25,7 +25,11 @@ ghcr.io/stremovskyy/orionis:0.5.0
 - Signing-key PEMs remain in Secrets Manager. ECS injects
   `ORIONIS_SIGNING_KEY_PEM` and, during rotation, `ORIONIS_SIGNING_KEY_PEM_OLD`.
   AppConfig contains only their `private_key_pem_env` references.
-- Local JSON configuration with `-config path/to/config.json` remains supported.
+- JSON and YAML are detected automatically from the configuration content, for
+  AppConfig and local files regardless of filename or extension. Both formats use
+  the same fields and validation. YAML must contain exactly one document.
+- Local JSON and YAML configuration with `-config path/to/config.json` or
+  `-config path/to/config.yaml` remains supported.
 
 ## Prepare AppConfig
 
@@ -65,6 +69,22 @@ aws appconfig start-deployment \
 
 Wait for AppConfig deployment state `COMPLETE` before starting new tasks. Future
 configuration changes also require rolling task replacement after deployment.
+
+To publish YAML, convert the production JSON configuration above using the same
+snake_case field names and a single YAML document. The loader detects the format
+from the content. Replace the upload command with:
+
+```bash
+aws appconfig create-hosted-configuration-version \
+  --application-id "$ORIONIS_APPCONFIG_APPLICATION" \
+  --configuration-profile-id "$ORIONIS_APPCONFIG_PROFILE" \
+  --content-type application/yaml --content fileb:///tmp/orionis-config.yaml \
+  /tmp/orionis-upload-response.json
+```
+
+Activate the returned version with the same `start-deployment` command and replace
+the ECS tasks after deployment completes. The task definition template and Docker
+examples continue to use JSON by default.
 
 ## IAM permissions
 
