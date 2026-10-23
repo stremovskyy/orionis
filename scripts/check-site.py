@@ -52,7 +52,7 @@ def main():
         for reference in page.links:
             url = urlsplit(reference)
             if url.scheme or url.netloc:
-                if url.scheme not in ("http", "https") or url.netloc != HOST:
+                if url.scheme not in ("", "http", "https") or url.netloc != HOST:
                     continue
                 if not url.path.startswith(BASE_PATH):
                     errors.append(f"{path.name}: site link is outside {BASE_PATH}: {reference}")

@@ -594,6 +594,9 @@ figcaption {
 .copy-button:hover {
   background: #29434a;
 }
+.copy-button:focus-visible {
+  outline-color: var(--code-ink);
+}
 pre {
   overflow: auto;
   padding: 20px;
@@ -1082,7 +1085,8 @@ tr:last-child td {
   .header-inner nav {
     order: 3;
     width: 100%;
-    gap: 25px;
+    flex-wrap: wrap;
+    gap: 0 20px;
     margin: 0;
   }
   .header-inner nav a {
