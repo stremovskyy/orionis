@@ -1,75 +1,497 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Deploy Orionis from Docker Hub or GitHub Container Registry.">
-    <title>Deploy Orionis</title>
-    <link rel="stylesheet" href="styles.css">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Run the published image locally, choose JSON or YAML, and deploy to ECS with configuration and signing keys in their proper places."
+    />
+    <meta name="color-scheme" content="light dark" />
+    <meta property="og:title" content="Deploy — Orionis" />
+    <meta
+      property="og:description"
+      content="Run the published image locally, choose JSON or YAML, and deploy to ECS with configuration and signing keys in their proper places."
+    />
+    <meta property="og:type" content="website" />
+    <meta
+      property="og:url"
+      content="https://stremovskyy.github.io/orionis/deploy.html"
+    />
+    <title>Deploy — Orionis</title>
+    <link
+      rel="canonical"
+      href="https://stremovskyy.github.io/orionis/deploy.html"
+    />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <script src="site.js?v=20261023"></script>
+    <link rel="stylesheet" href="styles.css?v=20261023" />
   </head>
   <body>
+    <a class="skip-link" href="#content">Skip to content</a>
     <header class="site-header">
-      <a class="brand" href="index.html">Orionis</a>
-      <nav aria-label="Primary navigation">
-        <a href="deploy.html">Deploy</a>
-        <a href="api.html">API</a>
-        <a href="security.html">Security</a>
-        <a href="https://github.com/stremovskyy/orionis/wiki">Wiki</a>
-      </nav>
+      <div class="header-inner">
+        <a class="brand" href="index.html" aria-label="Orionis home"
+          ><svg
+            class="brand-mark"
+            viewBox="0 0 28 34"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M5 5 23 9 9 18 20 29M5 5 9 18 4 29M23 9 20 29"
+              stroke="currentColor"
+              stroke-width="1.3"
+            />
+            <g fill="currentColor">
+              <circle cx="5" cy="5" r="2.5" />
+              <circle cx="23" cy="9" r="2" />
+              <circle cx="9" cy="18" r="2.5" />
+              <circle cx="20" cy="29" r="2.5" />
+              <circle cx="4" cy="29" r="1.7" />
+            </g></svg
+          >Orionis</a
+        >
+        <nav aria-label="Primary navigation">
+          <a href="index.html">Overview</a><a href="api.html">API</a
+          ><a href="deploy.html" aria-current="page">Deploy</a
+          ><a href="security.html">Security</a
+          ><a href="https://github.com/stremovskyy/orionis"
+            >GitHub <span aria-hidden="true">↗</span></a
+          >
+        </nav>
+        <div class="theme-control" hidden>
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <circle cx="10" cy="10" r="7" stroke="currentColor" />
+            <path d="M10 3a7 7 0 0 1 0 14Z" fill="currentColor" />
+          </svg>
+          <label class="sr-only" for="theme-picker">Color theme</label>
+          <select id="theme-picker" data-theme-picker>
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+      </div>
     </header>
-    <main class="doc-layout">
-      <h1>Deploy Orionis</h1>
-      <p>Use Docker Hub as the primary public image source, or GitHub Container Registry when you want a GitHub-native mirror.</p>
-
-      <h2>Docker Hub</h2>
-      <pre><code>docker pull stremovskyy/orionis:0.4.0</code></pre>
-
-      <h2>GitHub Container Registry</h2>
-      <pre><code>docker pull ghcr.io/stremovskyy/orionis:0.4.0</code></pre>
-
-      <h2>Run the auth server</h2>
-      <pre><code>test -f config/orionis.json || cp config/orionis.example.json config/orionis.json
+    <main id="content" tabindex="-1">
+      <div class="doc-hero container">
+        <p class="breadcrumb">
+          <a href="index.html">Orionis</a><span>/</span>Deploy
+        </p>
+        <h1>A clear path to production.</h1>
+        <p class="lede">
+          Run the published image locally, choose JSON or YAML, and deploy to
+          ECS with configuration and signing keys in their proper places.
+        </p>
+        <span class="tag">Orionis 0.6.0</span>
+      </div>
+      <div class="doc-layout container">
+        <aside class="toc">
+          <p class="toc-label">On this page</p>
+          <nav aria-label="On this page">
+            <a href="#docker">1. Run with Docker</a
+            ><a href="#configuration">2. Choose your configuration</a
+            ><a href="#aws">3. Deploy on AWS ECS</a
+            ><a href="#configuration-updates">4. Roll out changes</a
+            ><a href="#verify">5. Verify the result</a
+            ><a
+              class="toc-extra"
+              href="https://pkg.go.dev/github.com/stremovskyy/orionis"
+              >Go Reference ↗</a
+            >
+          </nav>
+        </aside>
+        <div class="doc-content">
+          <section class="doc-section" id="docker">
+            <h2>1. Run with Docker</h2>
+            <p>
+              The published auth-server image is available from Docker Hub and
+              GHCR for <code>linux/amd64</code> and <code>linux/arm64</code>.
+              Pin a release tag in deployed environments.
+            </p>
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span>Shell · choose either registry</span>
+              </div>
+              <pre><code class="language-sh">docker pull stremovskyy/orionis:0.6.0
+# Equivalent mirror:
+docker pull ghcr.io/stremovskyy/orionis:0.6.0</code></pre>
+            </div>
+            <p>
+              From the <a href="index.html#quick-start">repository root</a>,
+              create a local config and start the release image. The read-only
+              config mount and named volume keep configuration and generated
+              demo keys separate.
+            </p>
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span>Shell · run the published image</span>
+              </div>
+              <pre><code class="language-sh">test -f config/orionis.json || cp config/orionis.example.json config/orionis.json
 
 docker run --rm -d \
   --name orionis-auth \
   -p 8080:8080 \
-  -v "$PWD/config:/app/config:ro" \
+  -v &quot;$PWD/config:/app/config:ro&quot; \
   -v orionis-var:/app/var \
-  stremovskyy/orionis:0.4.0</code></pre>
-
-      <h2>Verify health</h2>
-      <pre><code>curl -fsS http://localhost:8080/healthz
-curl -fsS http://localhost:8080/readyz</code></pre>
-
-      <h2>AWS ECS Fargate</h2>
-      <p>Use the checked-in ECS templates when you want a managed AWS deployment from the public image.</p>
-      <pre><code>openssl genpkey -algorithm ED25519 > /tmp/orionis-ed25519.pem
-openssl genpkey -algorithm ED25519 > /tmp/orionis-ed25519-old.pem
-
-aws secretsmanager create-secret \
-  --name orionis/signing-key \
-  --secret-string file:///tmp/orionis-ed25519.pem
-
-aws secretsmanager create-secret \
-  --name orionis/signing-key-old \
-  --secret-string file:///tmp/orionis-ed25519-old.pem
-
-aws secretsmanager create-secret \
-  --name orionis/config \
-  --secret-string file://deploy/aws/ecs/orionis-config.example.json
-
-python3 - <<'PY' > /tmp/orionis-task-definition.json
-import os
-from pathlib import Path
-from string import Template
-
-template = Template(Path("deploy/aws/ecs/task-definition.template.json").read_text())
-print(template.safe_substitute(os.environ))
-PY
-
-aws ecs register-task-definition \
-  --cli-input-json file:///tmp/orionis-task-definition.json</code></pre>
-      <p><a href="https://github.com/stremovskyy/orionis/tree/main/deploy/aws/ecs">Open the AWS ECS guide</a>.</p>
+  stremovskyy/orionis:0.6.0</code></pre>
+            </div>
+            <h3>Or use Compose.</h3>
+            <p>
+              Use this as an alternative to the command above; both bind port
+              8080.
+            </p>
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span>Shell · release Compose</span>
+              </div>
+              <pre><code class="language-sh">test -f config/orionis.json || cp config/orionis.example.json config/orionis.json
+ORIONIS_IMAGE_TAG=0.6.0 docker compose -f docker-compose.release.yml up -d</code></pre>
+            </div>
+            <p>
+              To run the full source-built demo stack, including billing and
+              orders, use:
+            </p>
+            <div class="code-block">
+              <div class="code-toolbar"><span>Shell · complete demo</span></div>
+              <pre><code class="language-sh">docker compose up --build --wait -d orionis-auth billing-api
+docker compose run --rm orders-client</code></pre>
+            </div>
+            <aside class="note warning">
+              <strong>Generated keys are for local development</strong>
+              <p>
+                The demo can create signing keys in <code>/app/var</code>. For
+                production, provision stable private keys and inject them
+                through <code>private_key_pem_env</code>. Replace the sample
+                client credentials before sharing an environment.
+              </p>
+            </aside>
+          </section>
+          <section class="doc-section" id="configuration">
+            <h2>2. Choose your configuration</h2>
+            <p>
+              Local files and AWS AppConfig accept JSON or YAML. Orionis detects
+              the format from its content, independently of the filename,
+              extension, or AppConfig content type. Both formats use the same
+              snake_case fields and runtime validation.
+            </p>
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span>Shell · local JSON or YAML</span>
+              </div>
+              <pre><code class="language-sh">go run ./cmd/orionis-auth -config ./config/orionis.example.json
+# Or:
+go run ./cmd/orionis-auth -config ./config/orionis.example.yaml</code></pre>
+            </div>
+            <p>
+              These equivalent excerpts illustrate the shared field names. The
+              full checked-in examples also define signing keys, clients, and
+              operational limits.
+            </p>
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span>JSON · configuration excerpt</span>
+              </div>
+              <pre><code class="language-json">{
+  &quot;issuer&quot;: &quot;http://localhost:8080&quot;,
+  &quot;access_token_ttl&quot;: &quot;15m&quot;
+}</code></pre>
+            </div>
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span>YAML · equivalent excerpt</span>
+              </div>
+              <pre><code class="language-yaml">issuer: http://localhost:8080
+access_token_ttl: &quot;15m&quot;</code></pre>
+            </div>
+            <p>
+              YAML must contain exactly one document. Durations use strings such
+              as <code>"15m"</code>. In a Docker container, pass a YAML path
+              explicitly if you use one: the default config path remains
+              <code>/app/config/orionis.json</code>.
+            </p>
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span>Shell · Docker with a YAML config</span>
+              </div>
+              <pre><code class="language-sh">docker run --rm \
+  -p 8080:8080 \
+  -v &quot;$PWD/config:/app/config:ro&quot; \
+  -v orionis-var:/app/var \
+  stremovskyy/orionis:0.6.0 \
+  -config /app/config/orionis.example.yaml</code></pre>
+            </div>
+            <p>
+              See the complete
+              <a
+                href="https://github.com/stremovskyy/orionis/blob/main/config/orionis.example.json"
+                >JSON example</a
+              >
+              and
+              <a
+                href="https://github.com/stremovskyy/orionis/blob/main/config/orionis.example.yaml"
+                >YAML example</a
+              >.
+            </p>
+          </section>
+          <section class="doc-section" id="aws">
+            <h2>3. Deploy on AWS ECS</h2>
+            <p>
+              On Fargate, start Orionis with <code>-config aws</code>.
+              Configuration and private signing keys arrive through separate
+              paths.
+            </p>
+            <figure class="diagram" aria-labelledby="aws-caption">
+              <p class="diagram-title">03 / Configuration at startup</p>
+              <div class="source-flow">
+                <div class="source-node">
+                  <span class="tag">AWS APPCONFIG</span
+                  ><strong>Runtime configuration</strong>
+                  <p>
+                    JSON or YAML: issuer, clients, grants, TTL, limits, and key
+                    environment references.
+                  </p>
+                </div>
+                <div class="source-node">
+                  <span class="tag violet">SECRETS MANAGER</span
+                  ><strong>Private signing keys</strong>
+                  <p>
+                    ECS injects PEM values as environment variables before the
+                    process starts.
+                  </p>
+                </div>
+              </div>
+              <div class="flow-connector">
+                Load configuration ↓ &nbsp; ↓ Inject keys
+              </div>
+              <div class="flow-root">
+                ECS task → decode → validate → mount routes → serve
+              </div>
+              <figcaption id="aws-caption">
+                Confucius reads AppConfig once during startup, with a 30-second
+                deadline. Invalid or unavailable configuration prevents startup;
+                there is no background poller or fallback config.
+              </figcaption>
+            </figure>
+            <p>
+              Set the identifiers for an already deployed AppConfig
+              configuration:
+            </p>
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span>Environment · required AppConfig identifiers</span>
+              </div>
+              <pre><code class="language-text">AWS_REGION=eu-central-1
+AWS_APPCONFIG_APPLICATION=&lt;APPLICATION_ID&gt;
+AWS_APPCONFIG_ENVIRONMENT=&lt;ENVIRONMENT_ID&gt;
+AWS_APPCONFIG_PROFILE=&lt;CONFIGURATION_PROFILE_ID&gt;</code></pre>
+            </div>
+            <p>
+              Reference the injected signing key by environment name in the
+              config. This excerpt is part of a complete production
+              configuration:
+            </p>
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span>YAML · signing-key reference</span>
+              </div>
+              <pre><code class="language-yaml">active_kid: signing-key-2026-10
+keys:
+  - kid: signing-key-2026-10
+    private_key_pem_env: ORIONIS_SIGNING_KEY_PEM</code></pre>
+            </div>
+            <p>
+              Store client secret digests in
+              <code>secret_sha256_hex</code> arrays. Keep plaintext caller
+              credentials in the callers’ secret stores; keep private-key PEMs
+              in Secrets Manager.
+            </p>
+            <div class="table-wrap">
+              <table>
+                <caption class="sr-only">
+                  AWS role responsibilities
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Role</th>
+                    <th scope="col">Required access</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Task role</td>
+                    <td>
+                      AppConfig StartConfigurationSession and
+                      GetLatestConfiguration for the selected configuration.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Task execution role</td>
+                    <td>
+                      CloudWatch Logs and GetSecretValue for the signing-key
+                      secrets ECS injects.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              Use the checked-in
+              <a
+                href="https://github.com/stremovskyy/orionis/tree/main/deploy/aws/ecs"
+                >ECS templates and deployment guide</a
+              >
+              for AppConfig creation, scoped IAM policies, task-definition
+              rendering, networking, and service setup.
+            </p>
+          </section>
+          <section class="doc-section" id="configuration-updates">
+            <h2>4. Roll out changes</h2>
+            <p>
+              A new AppConfig version takes effect when new Orionis tasks start.
+              Use this order for a configuration rollout:
+            </p>
+            <figure class="diagram" aria-labelledby="rollout-caption">
+              <p class="diagram-title">04 / Apply a configuration change</p>
+              <ol class="steps">
+                <li>
+                  <strong>Deploy the config</strong>Validate the candidate and
+                  wait for AppConfig deployment state COMPLETE.
+                </li>
+                <li>
+                  <strong>Replace the tasks</strong>Start new tasks with the
+                  pinned image and deployed configuration.
+                </li>
+                <li>
+                  <strong>Prove the path</strong>Check readiness, token
+                  issuance, JWKS, and a protected consumer request.
+                </li>
+              </ol>
+              <figcaption id="rollout-caption">
+                AppConfig deployment prepares the version. Rolling task
+                replacement activates it in Orionis.
+              </figcaption>
+            </figure>
+            <p>
+              For an existing ECS service, retain the current task-definition
+              ARN and configuration version for rollback. After the AppConfig
+              deployment completes, replace tasks using your configured cluster,
+              service, and task definition:
+            </p>
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span>Shell · rolling task replacement</span>
+              </div>
+              <pre><code class="language-sh">aws ecs update-service \
+  --cluster &quot;$ORIONIS_ECS_CLUSTER&quot; \
+  --service &quot;$ORIONIS_ECS_SERVICE&quot; \
+  --task-definition &quot;$ORIONIS_TASK_DEFINITION&quot; \
+  --deployment-configuration &#x27;minimumHealthyPercent=100,maximumPercent=200,deploymentCircuitBreaker={enable=true,rollback=true}&#x27; \
+  --force-new-deployment</code></pre>
+            </div>
+            <p>
+              Set <code>ORIONIS_TASK_DEFINITION</code> to the task-definition
+              ARN or revision you intend to deploy. Keep issuer and signing-key
+              references stable when changing configuration delivery. Rollback
+              of an AppConfig change requires restoring the previous
+              configuration and replacing tasks again; an old task definition
+              alone still loads the currently deployed AppConfig version.
+            </p>
+          </section>
+          <section class="doc-section" id="verify">
+            <h2>5. Verify the result</h2>
+            <p>
+              Check the local server, or replace the base URL with your deployed
+              HTTPS endpoint:
+            </p>
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span>Shell · health and public metadata</span>
+              </div>
+              <pre><code class="language-sh">curl -fsS http://localhost:8080/healthz
+curl -fsS http://localhost:8080/readyz
+curl -fsS http://localhost:8080/.well-known/openid-configuration
+curl -fsS http://localhost:8080/.well-known/jwks.json</code></pre>
+            </div>
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span>JSON · health / readiness response</span>
+              </div>
+              <pre><code class="language-json">{&quot;service&quot;:&quot;orionis-auth&quot;,&quot;status&quot;:&quot;ok&quot;}</code></pre>
+            </div>
+            <p>
+              If <code>base_path</code> is configured, include it in every URL
+              and health check. Then follow the
+              <a href="api.html#request-token"
+                >token and protected-request walkthrough</a
+              >. For the complete local demo, expect <code>201</code> from
+              billing; also confirm that a missing token returns
+              <code>401</code> and an insufficient scope returns
+              <code>403</code>.
+            </p>
+            <aside class="note">
+              <strong>Readiness is the first check</strong>
+              <p>
+                A healthy task proves initialization succeeded. Issuing a token
+                and using it at a protected API proves the integration. During
+                replacement, also verify that previously issued tokens still
+                validate.
+              </p>
+            </aside>
+          </section>
+          <a class="next-page" href="security.html"
+            ><div>
+              <span>Continue the guide</span
+              ><strong>Operate with clear trust boundaries</strong>
+            </div>
+            <b aria-hidden="true">↗</b></a
+          >
+        </div>
+      </div>
     </main>
+    <footer class="site-footer container">
+      <div>
+        <a class="brand" href="index.html"
+          ><svg
+            class="brand-mark"
+            viewBox="0 0 28 34"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M5 5 23 9 9 18 20 29M5 5 9 18 4 29M23 9 20 29"
+              stroke="currentColor"
+              stroke-width="1.3"
+            />
+            <g fill="currentColor">
+              <circle cx="5" cy="5" r="2.5" />
+              <circle cx="23" cy="9" r="2" />
+              <circle cx="9" cy="18" r="2.5" />
+              <circle cx="20" cy="29" r="2.5" />
+              <circle cx="4" cy="29" r="1.7" />
+            </g></svg
+          >Orionis</a
+        >
+        <p>
+          A small toolkit. A clear trust model.<br />Open source · MIT license ·
+          Built with Go
+        </p>
+      </div>
+      <nav aria-label="Project resources">
+        <a href="https://github.com/stremovskyy/orionis">GitHub ↗</a
+        ><a href="https://pkg.go.dev/github.com/stremovskyy/orionis"
+          >Go Reference ↗</a
+        ><a href="https://github.com/stremovskyy/orionis/releases/tag/v0.6.0"
+          >Release 0.6.0 ↗</a
+        >
+      </nav>
+    </footer>
+    <span
+      class="sr-only"
+      role="status"
+      aria-live="polite"
+      data-copy-status
+    ></span>
   </body>
 </html>
