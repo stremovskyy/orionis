@@ -1,49 +1,467 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Production security notes for Orionis deployments.">
-    <title>Orionis Security</title>
-    <link rel="stylesheet" href="styles.css">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Know who holds each secret, what a token permits, and how to change keys without breaking valid requests."
+    />
+    <meta name="color-scheme" content="light dark" />
+    <meta property="og:title" content="Security — Orionis" />
+    <meta
+      property="og:description"
+      content="Know who holds each secret, what a token permits, and how to change keys without breaking valid requests."
+    />
+    <meta property="og:type" content="website" />
+    <meta
+      property="og:url"
+      content="https://stremovskyy.github.io/orionis/security.html"
+    />
+    <title>Security — Orionis</title>
+    <link
+      rel="canonical"
+      href="https://stremovskyy.github.io/orionis/security.html"
+    />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <script src="site.js?v=20261023"></script>
+    <link rel="stylesheet" href="styles.css?v=20261023" />
   </head>
   <body>
+    <a class="skip-link" href="#content">Skip to content</a>
     <header class="site-header">
-      <a class="brand" href="index.html">Orionis</a>
-      <nav aria-label="Primary navigation">
-        <a href="deploy.html">Deploy</a>
-        <a href="api.html">API</a>
-        <a href="security.html">Security</a>
-        <a href="https://github.com/stremovskyy/orionis">GitHub</a>
-      </nav>
+      <div class="header-inner">
+        <a class="brand" href="index.html" aria-label="Orionis home"
+          ><svg
+            class="brand-mark"
+            viewBox="0 0 28 34"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M5 5 23 9 9 18 20 29M5 5 9 18 4 29M23 9 20 29"
+              stroke="currentColor"
+              stroke-width="1.3"
+            />
+            <g fill="currentColor">
+              <circle cx="5" cy="5" r="2.5" />
+              <circle cx="23" cy="9" r="2" />
+              <circle cx="9" cy="18" r="2.5" />
+              <circle cx="20" cy="29" r="2.5" />
+              <circle cx="4" cy="29" r="1.7" />
+            </g></svg
+          >Orionis</a
+        >
+        <nav aria-label="Primary navigation">
+          <a href="index.html">Overview</a><a href="api.html">API</a
+          ><a href="deploy.html">Deploy</a
+          ><a href="security.html" aria-current="page">Security</a
+          ><a href="https://github.com/stremovskyy/orionis"
+            >GitHub <span aria-hidden="true">↗</span></a
+          >
+        </nav>
+        <div class="theme-control" hidden>
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <circle cx="10" cy="10" r="7" stroke="currentColor" />
+            <path d="M10 3a7 7 0 0 1 0 14Z" fill="currentColor" />
+          </svg>
+          <label class="sr-only" for="theme-picker">Color theme</label>
+          <select id="theme-picker" data-theme-picker>
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+      </div>
     </header>
-    <main class="doc-layout">
-      <h1>Production security</h1>
-      <p>Orionis is intentionally small, but production deployments still need clear operational boundaries.</p>
-
-      <h2>Secrets</h2>
-      <ul>
-        <li>Prefer `secret_sha256_hex` in config.</li>
-        <li>Keep plaintext client secrets outside Git.</li>
-        <li>Use one client id per calling service.</li>
-      </ul>
-
-      <h2>Keys</h2>
-      <ul>
-        <li>Inject production signing keys through `private_key_pem_env`.</li>
-        <li>Use `keys` plus `active_kid` for overlapping key rotation.</li>
-        <li>Use `/app/var` only for local file-backed demo keys.</li>
-        <li>Keep private signing keys readable only by the auth server.</li>
-        <li>Publish old and new public keys together during rotation.</li>
-      </ul>
-
-      <h2>Tokens</h2>
-      <ul>
-        <li>Use short access token TTLs, usually 5 to 15 minutes.</li>
-        <li>Validate issuer, audience, time claims, signature, token use, and scopes.</li>
-        <li>Do not reuse tokens across audiences.</li>
-        <li>Keep rate limiting and audit logs enabled for `/oauth/token` and `/readyz`.</li>
-      </ul>
+    <main id="content" tabindex="-1">
+      <div class="doc-hero container">
+        <p class="breadcrumb">
+          <a href="index.html">Orionis</a><span>/</span>Security
+        </p>
+        <h1>Trust, with clear boundaries.</h1>
+        <p class="lede">
+          Know who holds each secret, what a token permits, and how to change
+          keys without breaking valid requests.
+        </p>
+        <span class="tag">Orionis 0.6.0</span>
+      </div>
+      <div class="doc-layout container">
+        <aside class="toc">
+          <p class="toc-label">On this page</p>
+          <nav aria-label="On this page">
+            <a href="#trust-boundaries">1. Separate responsibilities</a
+            ><a href="#client-grants">2. Grant precise access</a
+            ><a href="#token-lifetime">3. Bound token lifetime</a
+            ><a href="#key-rotation">4. Rotate signing keys</a
+            ><a href="#operational-controls">5. Operate the boundary</a
+            ><a
+              class="toc-extra"
+              href="https://pkg.go.dev/github.com/stremovskyy/orionis"
+              >Go Reference ↗</a
+            >
+          </nav>
+        </aside>
+        <div class="doc-content">
+          <section class="doc-section" id="trust-boundaries">
+            <h2>1. Separate responsibilities</h2>
+            <p>
+              Each participant holds only the material it needs to do its job.
+              JWTs carry a service identity and permissions; the receiving API
+              independently validates them.
+            </p>
+            <div class="table-wrap">
+              <table>
+                <caption class="sr-only">
+                  Who holds which credentials
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Participant</th>
+                    <th scope="col">Holds</th>
+                    <th scope="col">Uses it to</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Calling service</td>
+                    <td>
+                      Its client ID, plaintext client secret, and cached access
+                      tokens.
+                    </td>
+                    <td>Authenticate to Orionis and call allowed APIs.</td>
+                  </tr>
+                  <tr>
+                    <td>Orionis auth server</td>
+                    <td>
+                      Client secret digests, grants, and private signing keys.
+                    </td>
+                    <td>Authenticate callers and sign access tokens.</td>
+                  </tr>
+                  <tr>
+                    <td>Resource service</td>
+                    <td>
+                      Expected issuer/audience and public verification keys.
+                    </td>
+                    <td>Verify tokens and enforce route permissions.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              A resource API needs its own client credentials only if it also
+              calls another service. Register <code>billing-api</code> as an
+              audience for receiving requests; give billing a separate caller
+              identity when it makes outbound calls.
+            </p>
+            <aside class="note">
+              <strong>Signed does not mean encrypted</strong>
+              <p>
+                JWT claims are readable by anyone holding the token. Keep
+                secrets and sensitive payloads out of claims. Protect Bearer
+                tokens in transit and storage; possession lets a caller use
+                their granted permissions.
+              </p>
+            </aside>
+          </section>
+          <section class="doc-section" id="client-grants">
+            <h2>2. Grant precise access</h2>
+            <p>
+              Give each calling service its own client ID and a narrow set of
+              audiences and concrete scopes. The receiving API checks both the
+              target and the required action.
+            </p>
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span>JSON · client registration excerpt</span>
+              </div>
+              <pre><code class="language-json">{
+  &quot;id&quot;: &quot;orders-service&quot;,
+  &quot;secret_sha256_hex&quot;: [&quot;&lt;SHA256_HEX_OF_CLIENT_SECRET&gt;&quot;],
+  &quot;allowed_audiences&quot;: [&quot;billing-api&quot;],
+  &quot;allowed_scopes&quot;: [
+    &quot;billing.invoice.create&quot;,
+    &quot;billing.invoice.read&quot;
+  ],
+  &quot;default_scopes&quot;: [&quot;billing.invoice.read&quot;]
+}</code></pre>
+            </div>
+            <p>
+              <code>secret_sha256_hex</code> is an array of lowercase SHA-256
+              hex digests. The caller still authenticates with the original
+              secret, so store that value in its secret manager. Never use a
+              digest as the caller’s password.
+            </p>
+            <p>
+              Default scopes are used when the token request omits scope. For
+              creating invoices, explicitly request
+              <code>billing.invoice.create</code>. Keep the server’s allowed
+              scopes and the API’s route requirements aligned.
+            </p>
+            <aside class="note">
+              <strong>Client-secret rotation</strong>
+              <p>
+                Allow overlapping secret digests while callers move to the new
+                secret. Roll out the updated Orionis configuration before
+                updating callers, then remove the old digest after all callers
+                have switched. Existing JWTs remain valid until expiry.
+              </p>
+            </aside>
+          </section>
+          <section class="doc-section" id="token-lifetime">
+            <h2>3. Bound token lifetime</h2>
+            <p>
+              The default access-token TTL is 15 minutes; choose a short
+              lifetime appropriate to your service. A token is accepted only
+              while its signature, issuer, audience, time claims, token use, and
+              route scopes are valid.
+            </p>
+            <ul>
+              <li>Use a token only for its intended audience.</li>
+              <li>
+                Keep service clocks synchronized and choose clock leeway
+                deliberately.
+              </li>
+              <li>
+                Keep the verification algorithm policy and issuer explicit.
+              </li>
+              <li>
+                Treat scopes as service permissions. User authorization belongs
+                in the application’s own policy.
+              </li>
+            </ul>
+            <aside class="note warning">
+              <strong>Plan for the lifetime of issued tokens</strong>
+              <p>
+                Changing or disabling a client affects future token issuance.
+                Resource services validate existing JWTs locally, so those
+                tokens can remain usable until expiry. Removing a key is also
+                subject to consumers’ JWKS cache behavior.
+              </p>
+            </aside>
+            <p>
+              The Go client renews cached tokens when a request needs a
+              replacement. The remote JWKS provider separately caches public
+              keys. Review the
+              <a href="api.html#jwks-lifecycle">key-cache lifecycle</a> when
+              choosing refresh and stale windows for your availability needs.
+            </p>
+          </section>
+          <section class="doc-section" id="key-rotation">
+            <h2>4. Rotate signing keys</h2>
+            <p>
+              Use <code>keys</code> to publish overlapping public keys and
+              <code>active_kid</code> to select the signer for new tokens. Keep
+              the issuer stable through the rotation.
+            </p>
+            <figure class="diagram" aria-labelledby="rotation-caption">
+              <p class="diagram-title">05 / Overlapping signing-key rotation</p>
+              <ol class="timeline">
+                <li>
+                  <span class="time">T0 / CURRENT STATE</span>
+                  <h3>Sign with the old key.</h3>
+                  <p>Consumers already know its public key.</p>
+                  <div class="key-pair">
+                    <span class="key active">old · active</span>
+                  </div>
+                </li>
+                <li>
+                  <span class="time">T1 / PUBLISH BOTH</span>
+                  <h3>Add the new key to JWKS.</h3>
+                  <p>
+                    Deploy both key references and replace tasks while the old
+                    key stays active. Verify both public keys are available.
+                  </p>
+                  <div class="key-pair">
+                    <span class="key active">old · active</span
+                    ><span class="key">new · published</span>
+                  </div>
+                </li>
+                <li>
+                  <span class="time">T2 / SWITCH THE SIGNER</span>
+                  <h3>Set active_kid to the new key.</h3>
+                  <p>
+                    Roll out the change. Verify new tokens use the new kid and
+                    consumers accept tokens signed by either key.
+                  </p>
+                  <div class="key-pair">
+                    <span class="key">old · verification</span
+                    ><span class="key active">new · active</span>
+                  </div>
+                </li>
+                <li>
+                  <span class="time">T3 / RETIRE THE OLD KEY</span>
+                  <h3>Wait, then remove.</h3>
+                  <p>
+                    After the last old signer stops, wait the maximum old-token
+                    lifetime plus accepted clock skew. Then remove the old key
+                    and roll out again.
+                  </p>
+                  <div class="key-pair">
+                    <span class="key active">new · active</span>
+                  </div>
+                </li>
+              </ol>
+              <figcaption id="rotation-caption">
+                Publishing first and retiring last lets old and new tokens
+                coexist. Count the overlap from the last token the old signer
+                could have issued, including rolling-deployment overlap.
+              </figcaption>
+            </figure>
+            <p>
+              Inject production Ed25519 private keys as PKCS8 PEM values through
+              <code>private_key_pem_env</code>. Keep them readable only by the
+              auth server and manage backups through your normal
+              secret-management process.
+            </p>
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span>YAML · overlap with the new signer active</span>
+              </div>
+              <pre><code class="language-yaml">active_kid: signing-new
+keys:
+  - kid: signing-old
+    private_key_pem_env: ORIONIS_SIGNING_KEY_PEM_OLD
+  - kid: signing-new
+    private_key_pem_env: ORIONIS_SIGNING_KEY_PEM</code></pre>
+            </div>
+          </section>
+          <section class="doc-section" id="operational-controls">
+            <h2>5. Operate the boundary</h2>
+            <p>
+              Run shared environments behind TLS. Restrict access to private
+              keys and caller secrets, keep logs free of credentials, and use
+              readiness together with an authorized consumer request to check a
+              rollout.
+            </p>
+            <div class="table-wrap">
+              <table>
+                <caption class="sr-only">
+                  Operational controls
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Control</th>
+                    <th scope="col">How to use it</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>TLS</td>
+                    <td>
+                      Protect token requests and Bearer API traffic in shared
+                      environments.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Rate limits</td>
+                    <td>
+                      Keep token and readiness limits enabled; tune for expected
+                      traffic and probes.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Audit logs</td>
+                    <td>
+                      Record authentication outcomes without tokens, secrets, or
+                      request bodies.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Log level</td>
+                    <td>Use info, warn, or error outside local debugging.</td>
+                  </tr>
+                  <tr>
+                    <td>Runtime configuration</td>
+                    <td>
+                      Validate a complete candidate, deploy AppConfig, then
+                      replace Orionis tasks.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              Built-in rate limiting is per process, endpoint, and remote IP.
+              Account for load balancers and multiple tasks when choosing
+              limits; use an ingress-level control if you need a shared global
+              limit.
+            </p>
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span>YAML · operational controls</span>
+              </div>
+              <pre><code class="language-yaml">rate_limits:
+  token:
+    enabled: true
+    limit: 60
+    window: &quot;1m&quot;
+  readyz:
+    enabled: true
+    limit: 300
+    window: &quot;1m&quot;
+audit_logs:
+  enabled: true
+log_level: info</code></pre>
+            </div>
+            <p>
+              These are the example limits, not capacity targets. Tune them for
+              your environment. For deployment steps and validation, return to
+              the <a href="deploy.html#configuration-updates">rollout guide</a>.
+            </p>
+          </section>
+          <a class="next-page" href="api.html"
+            ><div>
+              <span>Continue the guide</span
+              ><strong>Review the integration examples</strong>
+            </div>
+            <b aria-hidden="true">↗</b></a
+          >
+        </div>
+      </div>
     </main>
+    <footer class="site-footer container">
+      <div>
+        <a class="brand" href="index.html"
+          ><svg
+            class="brand-mark"
+            viewBox="0 0 28 34"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M5 5 23 9 9 18 20 29M5 5 9 18 4 29M23 9 20 29"
+              stroke="currentColor"
+              stroke-width="1.3"
+            />
+            <g fill="currentColor">
+              <circle cx="5" cy="5" r="2.5" />
+              <circle cx="23" cy="9" r="2" />
+              <circle cx="9" cy="18" r="2.5" />
+              <circle cx="20" cy="29" r="2.5" />
+              <circle cx="4" cy="29" r="1.7" />
+            </g></svg
+          >Orionis</a
+        >
+        <p>
+          A small toolkit. A clear trust model.<br />Open source · MIT license ·
+          Built with Go
+        </p>
+      </div>
+      <nav aria-label="Project resources">
+        <a href="https://github.com/stremovskyy/orionis">GitHub ↗</a
+        ><a href="https://pkg.go.dev/github.com/stremovskyy/orionis"
+          >Go Reference ↗</a
+        ><a href="https://github.com/stremovskyy/orionis/releases/tag/v0.6.0"
+          >Release 0.6.0 ↗</a
+        >
+      </nav>
+    </footer>
+    <span
+      class="sr-only"
+      role="status"
+      aria-live="polite"
+      data-copy-status
+    ></span>
   </body>
 </html>
