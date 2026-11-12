@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="Run the published image locally, choose JSON or YAML, and deploy to ECS with configuration and signing keys in their proper places."
+      content="Run Orionis with YAML by default, keep legacy JSON configurations working, and deploy to ECS with configuration and signing keys in their proper places."
     />
     <meta name="color-scheme" content="light dark" />
     <meta property="og:title" content="Deploy — Orionis" />
     <meta
       property="og:description"
-      content="Run the published image locally, choose JSON or YAML, and deploy to ECS with configuration and signing keys in their proper places."
+      content="Run Orionis with YAML by default, keep legacy JSON configurations working, and deploy to ECS with configuration and signing keys in their proper places."
     />
     <meta property="og:type" content="website" />
     <meta
@@ -81,10 +81,11 @@
         </p>
         <h1>A clear path to production.</h1>
         <p class="lede">
-          Run the published image locally, choose JSON or YAML, and deploy to
-          ECS with configuration and signing keys in their proper places.
+          Run Orionis with YAML by default, keep legacy JSON configurations
+          working, and deploy to ECS with configuration and signing keys in
+          their proper places.
         </p>
-        <span class="tag">Orionis 0.6.0</span>
+        <span class="tag">Orionis 0.7.0</span>
       </div>
       <div class="doc-layout container">
         <aside class="toc">
@@ -114,40 +115,49 @@
               <div class="code-toolbar">
                 <span>Shell · choose either registry</span>
               </div>
-              <pre><code class="language-sh">docker pull stremovskyy/orionis:0.6.0
+              <pre><code class="language-sh">docker pull stremovskyy/orionis:0.7.0
 # Equivalent mirror:
-docker pull ghcr.io/stremovskyy/orionis:0.6.0</code></pre>
+docker pull ghcr.io/stremovskyy/orionis:0.7.0</code></pre>
             </div>
             <p>
               From the <a href="index.html#quick-start">repository root</a>,
-              create a local config and start the release image. The read-only
-              config mount and named volume keep configuration and generated
-              demo keys separate.
+              create a YAML config on a fresh checkout. Keep an existing
+              <code>orionis.json</code> if you are upgrading: the new image
+              loads it when no YAML config is present.
+            </p>
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span>Shell · prepare the config</span>
+              </div>
+              <pre><code class="language-sh">if ! test -f config/orionis.yaml &amp;&amp; ! test -f config/orionis.yml &amp;&amp; ! test -f config/orionis.json; then
+  cp config/orionis.example.yaml config/orionis.yaml
+fi</code></pre>
+            </div>
+            <p>
+              Mount the config read-only and keep generated demo keys in a
+              separate named volume:
             </p>
             <div class="code-block">
               <div class="code-toolbar">
                 <span>Shell · run the published image</span>
               </div>
-              <pre><code class="language-sh">test -f config/orionis.json || cp config/orionis.example.json config/orionis.json
-
-docker run --rm -d \
+              <pre><code class="language-sh">docker run --rm -d \
   --name orionis-auth \
   -p 8080:8080 \
   -v &quot;$PWD/config:/app/config:ro&quot; \
   -v orionis-var:/app/var \
-  stremovskyy/orionis:0.6.0</code></pre>
+  stremovskyy/orionis:0.7.0</code></pre>
             </div>
             <h3>Or use Compose.</h3>
             <p>
-              Use this as an alternative to the command above; both bind port
-              8080.
+              After preparing the config, use this as an alternative to the
+              command above; both bind port 8080.
             </p>
             <div class="code-block">
               <div class="code-toolbar">
                 <span>Shell · release Compose</span>
               </div>
-              <pre><code class="language-sh">test -f config/orionis.json || cp config/orionis.example.json config/orionis.json
-ORIONIS_IMAGE_TAG=0.6.0 docker compose -f docker-compose.release.yml up -d</code></pre>
+              <pre><code class="language-sh">ORIONIS_IMAGE_TAG=0.7.0 docker compose -f docker-compose.release.yml up -d</code></pre>
             </div>
             <p>
               To run the full source-built demo stack, including billing and
@@ -171,19 +181,29 @@ docker compose run --rm orders-client</code></pre>
           <section class="doc-section" id="configuration">
             <h2>2. Choose your configuration</h2>
             <p>
-              Local files and AWS AppConfig accept JSON or YAML. Orionis detects
-              the format from its content, independently of the filename,
-              extension, or AppConfig content type. Both formats use the same
-              snake_case fields and runtime validation.
+              YAML is the default for local files and the Docker image. JSON
+              remains supported for existing configurations and explicit file
+              paths. Orionis detects either format from its content, regardless
+              of filename, extension, or AppConfig content type. Both use the
+              same snake_case fields and runtime validation.
             </p>
             <div class="code-block">
               <div class="code-toolbar">
-                <span>Shell · local JSON or YAML</span>
+                <span>Shell · default YAML or explicit legacy JSON</span>
               </div>
-              <pre><code class="language-sh">go run ./cmd/orionis-auth -config ./config/orionis.example.json
-# Or:
-go run ./cmd/orionis-auth -config ./config/orionis.example.yaml</code></pre>
+              <pre><code class="language-sh">go run ./cmd/orionis-auth
+# To select a legacy JSON file explicitly:
+go run ./cmd/orionis-auth -config ./config/orionis.example.json</code></pre>
             </div>
+            <p>
+              Without <code>-config</code> or <code>ORIONIS_CONFIG</code>,
+              Orionis looks for <code>orionis.yaml</code>, then
+              <code>orionis.yml</code>, then <code>orionis.json</code> in
+              <code>config/</code>. In a source checkout with none of those,
+              it loads the YAML example, or the JSON example if YAML is absent.
+              An explicit <code>-config</code> path takes priority over
+              <code>ORIONIS_CONFIG</code>.
+            </p>
             <p>
               These equivalent excerpts illustrate the shared field names. The
               full checked-in examples also define signing keys, clients, and
@@ -191,47 +211,35 @@ go run ./cmd/orionis-auth -config ./config/orionis.example.yaml</code></pre>
             </p>
             <div class="code-block">
               <div class="code-toolbar">
-                <span>JSON · configuration excerpt</span>
+                <span>YAML · configuration excerpt</span>
+              </div>
+              <pre><code class="language-yaml">issuer: http://localhost:8080
+access_token_ttl: &quot;15m&quot;</code></pre>
+            </div>
+            <div class="code-block">
+              <div class="code-toolbar">
+                <span>JSON · legacy equivalent</span>
               </div>
               <pre><code class="language-json">{
   &quot;issuer&quot;: &quot;http://localhost:8080&quot;,
   &quot;access_token_ttl&quot;: &quot;15m&quot;
 }</code></pre>
             </div>
-            <div class="code-block">
-              <div class="code-toolbar">
-                <span>YAML · equivalent excerpt</span>
-              </div>
-              <pre><code class="language-yaml">issuer: http://localhost:8080
-access_token_ttl: &quot;15m&quot;</code></pre>
-            </div>
             <p>
               YAML must contain exactly one document. Durations use strings such
-              as <code>"15m"</code>. In a Docker container, pass a YAML path
-              explicitly if you use one: the default config path remains
-              <code>/app/config/orionis.json</code>.
+              as <code>"15m"</code>. A present but invalid YAML file fails
+              startup instead of silently loading JSON.
             </p>
-            <div class="code-block">
-              <div class="code-toolbar">
-                <span>Shell · Docker with a YAML config</span>
-              </div>
-              <pre><code class="language-sh">docker run --rm \
-  -p 8080:8080 \
-  -v &quot;$PWD/config:/app/config:ro&quot; \
-  -v orionis-var:/app/var \
-  stremovskyy/orionis:0.6.0 \
-  -config /app/config/orionis.example.yaml</code></pre>
-            </div>
             <p>
               See the complete
               <a
-                href="https://github.com/stremovskyy/orionis/blob/main/config/orionis.example.json"
-                >JSON example</a
+                href="https://github.com/stremovskyy/orionis/blob/main/config/orionis.example.yaml"
+                >YAML example</a
               >
               and
               <a
-                href="https://github.com/stremovskyy/orionis/blob/main/config/orionis.example.yaml"
-                >YAML example</a
+                href="https://github.com/stremovskyy/orionis/blob/main/config/orionis.example.json"
+                >legacy JSON example</a
               >.
             </p>
           </section>
@@ -249,8 +257,8 @@ access_token_ttl: &quot;15m&quot;</code></pre>
                   <span class="tag">AWS APPCONFIG</span
                   ><strong>Runtime configuration</strong>
                   <p>
-                    JSON or YAML: issuer, clients, grants, TTL, limits, and key
-                    environment references.
+                    YAML (or legacy JSON): issuer, clients, grants, TTL, limits,
+                    and key environment references.
                   </p>
                 </div>
                 <div class="source-node">
@@ -341,6 +349,11 @@ keys:
               <a
                 href="https://github.com/stremovskyy/orionis/tree/main/deploy/aws/ecs"
                 >ECS templates and deployment guide</a
+              >
+              with the
+              <a
+                href="https://github.com/stremovskyy/orionis/blob/main/deploy/aws/ecs/orionis-config.example.yaml"
+                >YAML AppConfig example</a
               >
               for AppConfig creation, scoped IAM policies, task-definition
               rendering, networking, and service setup.
@@ -482,8 +495,8 @@ curl -fsS http://localhost:8080/.well-known/jwks.json</code></pre>
         <a href="https://github.com/stremovskyy/orionis">GitHub ↗</a
         ><a href="https://pkg.go.dev/github.com/stremovskyy/orionis"
           >Go Reference ↗</a
-        ><a href="https://github.com/stremovskyy/orionis/releases/tag/v0.6.0"
-          >Release 0.6.0 ↗</a
+        ><a href="https://github.com/stremovskyy/orionis/releases/tag/v0.7.0"
+          >Release 0.7.0 ↗</a
         >
       </nav>
     </footer>

@@ -5,8 +5,12 @@
 Terminal 1: authorization server.
 
 ```bash
-go run ./cmd/orionis-auth -config ./config/orionis.example.json
+go run ./cmd/orionis-auth -config ./config/orionis.example.yaml
 ```
+
+Without `-config` or `ORIONIS_CONFIG`, a clean checkout also selects the YAML
+example. Orionis searches personal `config/orionis.yaml`, `.yml`, and `.json`
+before the checked-in examples; JSON remains supported for existing installations.
 
 Terminal 2: protected billing service.
 

@@ -5,13 +5,13 @@ This directory contains templates for running the published Orionis auth-server 
 The default image is Docker Hub:
 
 ```text
-stremovskyy/orionis:0.6.0
+stremovskyy/orionis:0.7.0
 ```
 
 You can replace it with the equivalent GHCR image:
 
 ```text
-ghcr.io/stremovskyy/orionis:0.6.0
+ghcr.io/stremovskyy/orionis:0.7.0
 ```
 
 ## Runtime model
@@ -25,11 +25,14 @@ ghcr.io/stremovskyy/orionis:0.6.0
 - Signing-key PEMs remain in Secrets Manager. ECS injects
   `ORIONIS_SIGNING_KEY_PEM` and, during rotation, `ORIONIS_SIGNING_KEY_PEM_OLD`.
   AppConfig contains only their `private_key_pem_env` references.
-- JSON and YAML are detected automatically from the configuration content, for
+- YAML and legacy JSON are detected automatically from the configuration content, for
   AppConfig and local files regardless of filename or extension. Both formats use
   the same fields and validation. YAML must contain exactly one document.
-- Local JSON and YAML configuration with `-config path/to/config.json` or
-  `-config path/to/config.yaml` remains supported.
+- Local YAML and legacy JSON configuration with `-config path/to/config.yaml` or
+  `-config path/to/config.json` remains supported. Without an explicit source,
+  Orionis searches for `config/orionis.yaml`, `config/orionis.yml`, and
+  `config/orionis.json` in that order, then the examples when running from a
+  source checkout.
 
 ## Prepare AppConfig
 
@@ -37,28 +40,40 @@ Create an application, environment, and hosted freeform configuration profile,
 following the names used by the other services:
 
 ```bash
-aws appconfig create-application --name Orionis
-aws appconfig create-environment --application-id "$ORIONIS_APPCONFIG_APPLICATION" --name Production
-aws appconfig create-configuration-profile \
+export AWS_REGION=us-east-1
+ORIONIS_APPCONFIG_APPLICATION=$(aws appconfig create-application \
+  --name Orionis --query Id --output text)
+ORIONIS_APPCONFIG_ENVIRONMENT=$(aws appconfig create-environment \
   --application-id "$ORIONIS_APPCONFIG_APPLICATION" \
-  --name main-config --location-uri hosted --type AWS.Freeform
+  --name Production --query Id --output text)
+ORIONIS_APPCONFIG_PROFILE=$(aws appconfig create-configuration-profile \
+  --application-id "$ORIONIS_APPCONFIG_APPLICATION" \
+  --name main-config --location-uri hosted --type AWS.Freeform \
+  --query Id --output text)
+export ORIONIS_APPCONFIG_APPLICATION ORIONIS_APPCONFIG_ENVIRONMENT ORIONIS_APPCONFIG_PROFILE
 ```
 
-Copy `orionis-config.example.json` and replace its placeholders. Store only client
+Copy `orionis-config.example.yaml` and replace its placeholders. Store only client
 SHA-256 digests, never plaintext credentials. Keep the active and overlapping
 signing keys in Secrets Manager as PKCS8 PEM, referenced by environment name in
-JSON. For a single signing key, omit the old key from both JSON and the task
+YAML. For a single signing key, omit the old key from both YAML and the task
 secret mappings. For an existing deployment, preserve its issuer, base path,
 clients, audiences, scopes, TTL, key IDs, and key secret ARN exactly.
 
-Upload the completed JSON and activate the returned version:
+```bash
+cp deploy/aws/ecs/orionis-config.example.yaml /tmp/orionis-config.yaml
+# Edit /tmp/orionis-config.yaml for this environment before uploading it.
+```
+
+Upload the completed YAML and activate the returned version:
 
 ```bash
 aws appconfig create-hosted-configuration-version \
   --application-id "$ORIONIS_APPCONFIG_APPLICATION" \
   --configuration-profile-id "$ORIONIS_APPCONFIG_PROFILE" \
-  --content-type application/json --content fileb:///tmp/orionis-config.json \
-  /tmp/orionis-upload-response.json
+  --content-type application/yaml --content fileb:///tmp/orionis-config.yaml \
+  > /tmp/orionis-upload-response.json
+ORIONIS_APPCONFIG_VERSION=$(jq -r '.VersionNumber' /tmp/orionis-upload-response.json)
 aws appconfig start-deployment \
   --application-id "$ORIONIS_APPCONFIG_APPLICATION" \
   --environment-id "$ORIONIS_APPCONFIG_ENVIRONMENT" \
@@ -70,21 +85,20 @@ aws appconfig start-deployment \
 Wait for AppConfig deployment state `COMPLETE` before starting new tasks. Future
 configuration changes also require rolling task replacement after deployment.
 
-To publish YAML, convert the production JSON configuration above using the same
-snake_case field names and a single YAML document. The loader detects the format
-from the content. Replace the upload command with:
+Existing JSON configurations remain supported. To upload JSON, use the legacy
+`orionis-config.example.json` schema and replace the upload command with:
 
 ```bash
 aws appconfig create-hosted-configuration-version \
   --application-id "$ORIONIS_APPCONFIG_APPLICATION" \
   --configuration-profile-id "$ORIONIS_APPCONFIG_PROFILE" \
-  --content-type application/yaml --content fileb:///tmp/orionis-config.yaml \
-  /tmp/orionis-upload-response.json
+  --content-type application/json --content fileb:///tmp/orionis-config.json \
+  > /tmp/orionis-upload-response.json
 ```
 
-Activate the returned version with the same `start-deployment` command and replace
-the ECS tasks after deployment completes. The task definition template and Docker
-examples continue to use JSON by default.
+Activate the returned version with the same `ORIONIS_APPCONFIG_VERSION` and
+`start-deployment` commands, then replace the ECS tasks after deployment completes.
+Neither format changes the ECS task's `-config aws` source.
 
 ## IAM permissions
 
@@ -108,13 +122,9 @@ execution role. No config secret is injected into the new task.
 Set placeholders for your account, region, and infrastructure:
 
 ```bash
-export AWS_REGION=us-east-1
 export ORIONIS_EXECUTION_ROLE_ARN="<TASK_EXECUTION_ROLE_ARN>"
 export ORIONIS_EXECUTION_ROLE_NAME="<TASK_EXECUTION_ROLE_NAME>"
 export ORIONIS_TASK_ROLE_ARN="<TASK_ROLE_ARN>"
-export ORIONIS_APPCONFIG_APPLICATION="<APPLICATION_ID>"
-export ORIONIS_APPCONFIG_ENVIRONMENT="<ENVIRONMENT_ID>"
-export ORIONIS_APPCONFIG_PROFILE="<CONFIGURATION_PROFILE_ID>"
 export ORIONIS_SIGNING_KEY_SECRET_ARN="<SECRETS_MANAGER_SIGNING_KEY_SECRET_ARN>"
 export ORIONIS_OLD_SIGNING_KEY_SECRET_ARN="<SECRETS_MANAGER_OLD_SIGNING_KEY_SECRET_ARN>"
 export ORIONIS_LOG_GROUP="/ecs/orionis-auth"
@@ -197,7 +207,7 @@ Expected response:
 
 ## Migrate and roll back
 
-Before migration, record the old task-definition ARN, image digest, config-secret
+Before migration, record the old task-definition ARN, image digest, AppConfig
 version, JWKS, and a successful token/consumer validation. Copy the **active** config
 version exactly; do not activate unrelated prepared versions. Preserve signing
 key references. Validate the new image/configuration before service replacement.
@@ -209,6 +219,6 @@ consumer request throughout replacement. Verify tokens issued before deployment
 remain valid after it and confirm the JWKS/key IDs have not changed.
 
 If startup or business-path checks fail, update the service back to the recorded
-old task-definition ARN. Retain the old config secret as the rollback source;
+old task-definition ARN. Retain the old hosted config version as the rollback source;
 do not delete it as part of migration. Do not rotate keys or change client grants
 in the configuration-source migration.

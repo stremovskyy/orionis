@@ -5,62 +5,64 @@ Orionis publishes the same auth-server image to Docker Hub and GitHub Container 
 ## Docker Hub
 
 ```bash
-docker pull stremovskyy/orionis:0.4.0
+docker pull stremovskyy/orionis:0.7.0
 ```
 
+From the repository root, create a YAML config for a fresh installation. Keep
+an existing `orionis.json` in place; the image will load it when no YAML config
+exists.
+
 ```bash
-test -f config/orionis.json || cp config/orionis.example.json config/orionis.json
+if [ ! -f config/orionis.yaml ] && [ ! -f config/orionis.yml ] && [ ! -f config/orionis.json ]; then
+  cp config/orionis.example.yaml config/orionis.yaml
+fi
 
 docker run --rm -d \
   --name orionis-auth \
   -p 8080:8080 \
   -v "$PWD/config:/app/config:ro" \
   -v orionis-var:/app/var \
-  stremovskyy/orionis:0.4.0
+  stremovskyy/orionis:0.7.0
 ```
 
 ## GitHub Container Registry
 
-```bash
-docker pull ghcr.io/stremovskyy/orionis:0.4.0
-```
+The GHCR image has the same default config selection:
 
 ```bash
-test -f config/orionis.json || cp config/orionis.example.json config/orionis.json
+docker pull ghcr.io/stremovskyy/orionis:0.7.0
 
 docker run --rm -d \
   --name orionis-auth \
   -p 8080:8080 \
   -v "$PWD/config:/app/config:ro" \
   -v orionis-var:/app/var \
-  ghcr.io/stremovskyy/orionis:0.4.0
+  ghcr.io/stremovskyy/orionis:0.7.0
 ```
+
+Without an explicit source, the image selects `/app/config/orionis.yaml`, then
+`orionis.yml`, then legacy `orionis.json`. A selected invalid YAML file causes
+startup to fail instead of loading JSON. To select another file or AWS AppConfig,
+pass `-config path/to/file` or `-config aws` explicitly.
 
 ## Pinned release
 
-Prefer a pinned tag for shared environments:
+Pin a version in shared environments:
 
 ```bash
-docker pull stremovskyy/orionis:0.4.0
-docker pull ghcr.io/stremovskyy/orionis:0.4.0
+ORIONIS_IMAGE_TAG=0.7.0 docker compose -f docker-compose.release.yml up -d
 ```
 
 ## AWS ECS Fargate
 
 Use `deploy/aws/ecs/` from the repository to deploy the public image on ECS Fargate.
+The task definition uses `stremovskyy/orionis:0.7.0`, starts with `-config aws`,
+reads the hosted YAML configuration from AppConfig, and injects signing keys
+from Secrets Manager. Legacy JSON AppConfig content remains supported. It also
+provides `/healthz` and `/readyz` endpoints and sends logs to CloudWatch.
 
-The task definition template uses:
-
-- `stremovskyy/orionis:0.4.0`
-- `awsvpc` networking
-- AWS Secrets Manager for `ORIONIS_CONFIG_JSON`
-- AWS Secrets Manager secret injection for `ORIONIS_SIGNING_KEY_PEM` and `ORIONIS_SIGNING_KEY_PEM_OLD`
-- `/healthz` as the ECS container health check
-- `/readyz` as the readiness endpoint
-- CloudWatch Logs through `awslogs`
-
-The ECS/Fargate template injects signing keys as environment secrets and does not mount EFS or
-write keys to `/app/var`; local Docker examples keep using `/app/var` only for generated demo keys.
+The ECS/Fargate template does not mount EFS or write keys to `/app/var`;
+local Docker examples keep using `/app/var` for generated demo keys.
 
 ## Health check
 

@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/stremovskyy/orionis/internal/authapp"
 )
 
 func TestNewHTTPServerHasProductionTimeouts(t *testing.T) {
@@ -41,6 +43,141 @@ func TestRunHelpExitsSuccessfully(t *testing.T) {
 
 	if err := run(context.Background(), []string{"-h"}); err != nil {
 		t.Fatalf("run(-h) = %v, want nil", err)
+	}
+}
+
+func TestSelectConfigSourceAutoOrder(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		files []string
+		want  string
+	}{
+		{
+			name:  "YAML before JSON",
+			files: []string{"config/orionis.yaml", "config/orionis.json"},
+			want:  "config/orionis.yaml",
+		},
+		{
+			name:  "YML before JSON",
+			files: []string{"config/orionis.yml", "config/orionis.json"},
+			want:  "config/orionis.yml",
+		},
+		{
+			name:  "legacy JSON only",
+			files: []string{"config/orionis.json"},
+			want:  "config/orionis.json",
+		},
+		{
+			name:  "own JSON before example YAML",
+			files: []string{"config/orionis.json", "config/orionis.example.yaml"},
+			want:  "config/orionis.json",
+		},
+		{
+			name:  "example YAML before example JSON",
+			files: []string{"config/orionis.example.yaml", "config/orionis.example.json"},
+			want:  "config/orionis.example.yaml",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+
+			for _, path := range tt.files {
+				writeConfigSourceFixture(t, root, path, "issuer: https://auth.example.test\n")
+			}
+
+			got, err := selectConfigSource("", false, "", root)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if want := filepath.Join(root, tt.want); got != want {
+				t.Fatalf("config source = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestSelectConfigSourceExplicitPrecedence(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeConfigSourceFixture(t, root, "config/orionis.yaml", "issuer: https://auth.example.test\n")
+
+	for _, tt := range []struct {
+		name     string
+		flagPath string
+		flagSet  bool
+		envPath  string
+		want     string
+	}{
+		{"flag before environment", "legacy.json", true, "other.yaml", "legacy.json"},
+		{"environment before auto", "", false, "other.yaml", "other.yaml"},
+		{"explicit missing path does not fall back", "missing.yaml", true, "", "missing.yaml"},
+		{"AWS remains explicit", "aws", true, "other.yaml", "aws"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := selectConfigSource(tt.flagPath, tt.flagSet, tt.envPath, root)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got != tt.want {
+				t.Fatalf("config source = %q, want %q", got, tt.want)
+			}
+		})
+	}
+
+	if _, err := selectConfigSource("", true, "other.yaml", root); err == nil {
+		t.Fatal("explicit empty -config must fail")
+	}
+}
+
+func TestSelectConfigSourceMissingOrInvalidYAML(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+
+	if _, err := selectConfigSource("", false, "", root); err == nil ||
+		!strings.Contains(err.Error(), "config/orionis.yaml") {
+		t.Fatalf("expected error listing searched config paths, got %v", err)
+	}
+
+	writeConfigSourceFixture(t, root, "config/orionis.yaml", "issuer: [unterminated\n")
+	writeConfigSourceFixture(t, root, "config/orionis.json", `{"issuer":"https://auth.example.test"}`)
+
+	selected, err := selectConfigSource("", false, "", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if want := filepath.Join(root, "config/orionis.yaml"); selected != want {
+		t.Fatalf("selected = %q, want %q", selected, want)
+	}
+
+	if _, err := authapp.LoadConfig(selected); err == nil || !strings.Contains(err.Error(), "decode config") {
+		t.Fatalf("invalid selected YAML must fail without JSON fallback, got %v", err)
+	}
+}
+
+func writeConfigSourceFixture(t *testing.T, root, path, body string) {
+	t.Helper()
+
+	fullPath := filepath.Join(root, path)
+
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(fullPath, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
