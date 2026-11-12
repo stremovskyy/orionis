@@ -96,8 +96,8 @@
             <div class="hero-meta">
               <a
                 class="release"
-                href="https://github.com/stremovskyy/orionis/releases/tag/v0.6.0"
-                >v0.6.0</a
+                href="https://github.com/stremovskyy/orionis/releases/tag/v0.7.0"
+                >v0.7.0</a
               ><span>OAuth 2.0</span><span>Ed25519 by default</span>
             </div>
           </div>
@@ -345,13 +345,14 @@
                 <div class="code-toolbar"><span>Set up the example</span></div>
                 <pre><code class="language-sh">git clone https://github.com/stremovskyy/orionis.git
 cd orionis
-git checkout v0.6.0</code></pre>
+git checkout v0.7.0</code></pre>
               </div>
               <aside class="note">
                 <strong>Local development</strong>
                 <p>
                   The example uses HTTP, demo credentials, and file-backed
-                  signing keys. Follow the
+                  signing keys. On a fresh checkout, Orionis loads the YAML
+                  example by default. Follow the
                   <a href="deploy.html">deployment guide</a> before running in a
                   shared environment.
                 </p>
@@ -374,7 +375,7 @@ git checkout v0.6.0</code></pre>
                 <div class="code-toolbar">
                   <span>Shell · authorization server</span>
                 </div>
-                <pre><code class="language-sh">go run ./cmd/orionis-auth -config ./config/orionis.example.yaml</code></pre>
+                <pre><code class="language-sh">go run ./cmd/orionis-auth</code></pre>
               </div>
               <p class="terminal-label">
                 <span>TERMINAL 02</span>Start the protected API
@@ -472,8 +473,8 @@ git checkout v0.6.0</code></pre>
         <a href="https://github.com/stremovskyy/orionis">GitHub ↗</a
         ><a href="https://pkg.go.dev/github.com/stremovskyy/orionis"
           >Go Reference ↗</a
-        ><a href="https://github.com/stremovskyy/orionis/releases/tag/v0.6.0"
-          >Release 0.6.0 ↗</a
+        ><a href="https://github.com/stremovskyy/orionis/releases/tag/v0.7.0"
+          >Release 0.7.0 ↗</a
         >
       </nav>
     </footer>

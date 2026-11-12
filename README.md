@@ -55,8 +55,8 @@ orionis/
   examples/gin-orders-client/    Client service example that calls billing
   examples/java-orders-client/   Java calling-service example without Maven dependencies
   examples/php-orders-client/    PHP calling-service example without Composer dependencies
-  config/orionis.example.json    Local development config
-  config/orionis.example.yaml    Equivalent YAML development config
+  config/orionis.example.yaml    Default local development config
+  config/orionis.example.json    Legacy JSON development config
   deploy/aws/ecs/                AWS ECS/Fargate task definition and guide
   docs/architecture.md           Architecture notes
   docs/wiki/                     GitHub Wiki source pages
@@ -78,19 +78,26 @@ Terminal 1: authorization server.
 
 ```bash
 cd ~/go/src/github.com/stremovskyy/orionis
-go run ./cmd/orionis-auth -config ./config/orionis.example.json
+go run ./cmd/orionis-auth
 ```
 
-YAML is also supported:
+In a clean checkout, Orionis selects `config/orionis.example.yaml`. To run
+the demo with that example when you also have a personal config, pass it
+explicitly:
 
 ```bash
 go run ./cmd/orionis-auth -config ./config/orionis.example.yaml
 ```
 
-Local configuration is detected as JSON or YAML from its content, regardless of
-filename or extension. Both formats use the same fields and snake_case names,
-including duration strings such as `access_token_ttl: "15m"`, and the same runtime
-validation. YAML files must contain exactly one document. Docker examples use JSON.
+Without `-config` or `ORIONIS_CONFIG`, Orionis looks for `config/orionis.yaml`,
+`config/orionis.yml`, then legacy `config/orionis.json`. If none exists, it
+uses the YAML example before the JSON example. An existing personal JSON file
+takes priority over the YAML example. An invalid or unreadable selected file
+stops startup; Orionis does not fall back to another file. `-config` takes
+priority over `ORIONIS_CONFIG`. Both formats use the same snake_case fields,
+including duration strings such as `access_token_ttl: "15m"`, and the same
+runtime validation. The format is detected from content, regardless of file
+extension; YAML must contain exactly one document.
 
 Terminal 2: protected billing service.
 
@@ -158,32 +165,36 @@ ORIONIS_SCOPE          default: billing.invoice.create
 Pull the published auth server image from Docker Hub:
 
 ```bash
-docker pull stremovskyy/orionis:0.6.0
+docker pull stremovskyy/orionis:0.7.0
 ```
 
 Or pull the GitHub Packages mirror from GitHub Container Registry:
 
 ```bash
-docker pull ghcr.io/stremovskyy/orionis:0.6.0
+docker pull ghcr.io/stremovskyy/orionis:0.7.0
 ```
 
 Run Orionis from the published image:
 
 ```bash
-test -f config/orionis.json || cp config/orionis.example.json config/orionis.json
+if [ ! -f config/orionis.yaml ] && [ ! -f config/orionis.yml ] && [ ! -f config/orionis.json ]; then
+  cp config/orionis.example.yaml config/orionis.yaml
+fi
 
 docker run --rm -d \
   --name orionis-auth \
   -p 8080:8080 \
   -v "$PWD/config:/app/config:ro" \
   -v orionis-var:/app/var \
-  stremovskyy/orionis:0.6.0
+  stremovskyy/orionis:0.7.0
 ```
 
 Or use the release Compose file:
 
 ```bash
-test -f config/orionis.json || cp config/orionis.example.json config/orionis.json
+if [ ! -f config/orionis.yaml ] && [ ! -f config/orionis.yml ] && [ ! -f config/orionis.json ]; then
+  cp config/orionis.example.yaml config/orionis.yaml
+fi
 
 docker compose -f docker-compose.release.yml up -d
 curl -fsS http://localhost:8080/healthz
@@ -193,10 +204,12 @@ curl -fsS http://localhost:8080/readyz
 Pin a released image in deployed environments:
 
 ```bash
-ORIONIS_IMAGE_TAG=0.6.0 docker compose -f docker-compose.release.yml up -d
+ORIONIS_IMAGE_TAG=0.7.0 docker compose -f docker-compose.release.yml up -d
 ```
 
-The published image expects its config at `/app/config/orionis.json` by default.
+The v0.7.0 image selects `/app/config/orionis.yaml` (or `.yml`) before the
+legacy `/app/config/orionis.json`; no command override is needed for an
+existing JSON-only installation.
 Mount the config read-only, replace demo secrets before sharing an environment, and prefer
 `secret_sha256_hex` over plaintext secrets in deployed configs. Local Docker examples use
 `/app/var` for generated demo signing keys; ECS/Fargate should load signing keys from
@@ -205,20 +218,20 @@ injected secret environment variables instead.
 The GitHub Container Registry image uses the same tags as Docker Hub:
 
 ```bash
-docker pull ghcr.io/stremovskyy/orionis:0.6.0
+docker pull ghcr.io/stremovskyy/orionis:0.7.0
 
 docker run --rm -d \
   --name orionis-auth \
   -p 8080:8080 \
   -v "$PWD/config:/app/config:ro" \
   -v orionis-var:/app/var \
-  ghcr.io/stremovskyy/orionis:0.6.0
+  ghcr.io/stremovskyy/orionis:0.7.0
 ```
 
 ## Deploy on AWS ECS Fargate
 
 Use the templates in [`deploy/aws/ecs`](deploy/aws/ecs) to run the published image on ECS Fargate.
-The task definition uses `stremovskyy/orionis:0.6.0`, CloudWatch logs, health/readiness
+The task definition uses `stremovskyy/orionis:0.7.0`, CloudWatch logs, health/readiness
 endpoints, and Confucius v1.4.1 to load configuration from AWS AppConfig at startup.
 Signing-key PEMs remain in AWS Secrets Manager and are injected through
 `ORIONIS_SIGNING_KEY_PEM` (and optionally `ORIONIS_SIGNING_KEY_PEM_OLD`).
@@ -232,15 +245,16 @@ AWS_APPCONFIG_ENVIRONMENT=<ENVIRONMENT_ID>
 AWS_APPCONFIG_PROFILE=<CONFIGURATION_PROFILE_ID>
 ```
 
-Publish JSON or YAML configuration to a hosted AppConfig profile and deploy it to
+Publish YAML configuration to a hosted AppConfig profile and deploy it to
 the selected environment before starting the ECS task. The format is detected
 automatically from the content. Both formats use the same fields, including
 `secret_sha256_hex` arrays and signing-key environment
-references. Keep plaintext client credentials and signing-key PEMs outside AppConfig.
+references. Existing JSON configurations remain supported. Keep plaintext
+client credentials and signing-key PEMs outside AppConfig.
 
 Follow [`deploy/aws/ecs/README.md`](deploy/aws/ecs/README.md) for IAM permissions,
 configuration deployment, rolling migration, rollback, and verification. Local
-`-config path/to/orionis.json` and `-config path/to/orionis.yaml` remain supported.
+`-config path/to/orionis.yaml` and legacy `-config path/to/orionis.json` remain supported.
 Both sources use the same runtime validation. AppConfig is fetched once with a
 30-second startup deadline; activating a new AppConfig version requires rolling
 replacement of ECS tasks.
@@ -508,38 +522,27 @@ verifier := orionis.NewVerifier().
 
 # Configuration example
 
-```json
-{
-  "listen": ":8080",
-  "log_level": "info",
-  "issuer": "http://localhost:8080",
-  "access_token_ttl": "15m",
-  "active_kid": "orionis-local-ed25519-2",
-  "keys": [
-    {
-      "kid": "orionis-local-ed25519-1",
-      "private_key_path": "./var/orionis-ed25519-1.pem"
-    },
-    {
-      "kid": "orionis-local-ed25519-2",
-      "private_key_path": "./var/orionis-ed25519-2.pem"
-    }
-  ],
-  "rate_limits": {
-    "token": {"enabled": true, "limit": 60, "window": "1m"},
-    "readyz": {"enabled": true, "limit": 300, "window": "1m"}
-  },
-  "audit_logs": {"enabled": true},
-  "clients": [
-    {
-      "id": "orders-service",
-      "secrets": ["orders-local-secret-change-me"],
-      "allowed_audiences": ["billing-api"],
-      "allowed_scopes": ["billing.invoice.create", "billing.invoice.read"],
-      "default_scopes": ["billing.invoice.read"]
-    }
-  ]
-}
+```yaml
+listen: ":8080"
+log_level: info
+issuer: http://localhost:8080
+access_token_ttl: "15m"
+active_kid: orionis-local-ed25519-2
+keys:
+  - kid: orionis-local-ed25519-1
+    private_key_path: ./var/orionis-ed25519-1.pem
+  - kid: orionis-local-ed25519-2
+    private_key_path: ./var/orionis-ed25519-2.pem
+rate_limits:
+  token: {enabled: true, limit: 60, window: "1m"}
+  readyz: {enabled: true, limit: 300, window: "1m"}
+audit_logs: {enabled: true}
+clients:
+  - id: orders-service
+    secrets: [orders-local-secret-change-me]
+    allowed_audiences: [billing-api]
+    allowed_scopes: [billing.invoice.create, billing.invoice.read]
+    default_scopes: [billing.invoice.read]
 ```
 
 ## Production-style service-to-service config
@@ -547,7 +550,7 @@ verifier := orionis.NewVerifier().
 Use this pattern when one internal service needs access to another internal service.
 The caller is the OAuth client. The receiver is the audience. Scopes describe the allowed actions.
 
-Do not put plaintext client secrets in the JSON config for shared or deployed environments.
+Do not put plaintext client secrets in the config for shared or deployed environments.
 Store only `secret_sha256_hex` in Orionis config and keep the plaintext secret in your secret manager or a local, untracked env file.
 
 Create a client secret and hash it:
@@ -563,44 +566,32 @@ chmod 600 ./secrets/client-secrets.env
 
 Add the caller service to the auth server config:
 
-```json
-{
-  "listen": ":8080",
-  "log_level": "info",
-  "issuer": "https://auth.example.internal",
-  "access_token_ttl": "15m",
-  "active_kid": "orionis-dev-ed25519-2",
-  "keys": [
-    {
-      "kid": "orionis-dev-ed25519-1",
-      "private_key_pem_env": "ORIONIS_SIGNING_KEY_PEM_OLD"
-    },
-    {
-      "kid": "orionis-dev-ed25519-2",
-      "private_key_pem_env": "ORIONIS_SIGNING_KEY_PEM"
-    }
-  ],
-  "rate_limits": {
-    "token": {"enabled": true, "limit": 60, "window": "1m"},
-    "readyz": {"enabled": true, "limit": 300, "window": "1m"}
-  },
-  "audit_logs": {"enabled": true},
-  "clients": [
-    {
-      "id": "caller-service",
-      "secret_sha256_hex": ["<CLIENT_SECRET_SHA>"],
-      "allowed_audiences": ["target-api"],
-      "allowed_scopes": [
-        "target.webhooks.read",
-        "target.webhooks.resend",
-        "target.webhooks.admin.delete",
-        "target.products.read",
-        "target.products.write"
-      ],
-      "default_scopes": ["target.webhooks.read"]
-    }
-  ]
-}
+```yaml
+listen: ":8080"
+log_level: info
+issuer: https://auth.example.internal
+access_token_ttl: "15m"
+active_kid: orionis-dev-ed25519-2
+keys:
+  - kid: orionis-dev-ed25519-1
+    private_key_pem_env: ORIONIS_SIGNING_KEY_PEM_OLD
+  - kid: orionis-dev-ed25519-2
+    private_key_pem_env: ORIONIS_SIGNING_KEY_PEM
+rate_limits:
+  token: {enabled: true, limit: 60, window: "1m"}
+  readyz: {enabled: true, limit: 300, window: "1m"}
+audit_logs: {enabled: true}
+clients:
+  - id: caller-service
+    secret_sha256_hex: ["<CLIENT_SECRET_SHA>"]
+    allowed_audiences: [target-api]
+    allowed_scopes:
+      - target.webhooks.read
+      - target.webhooks.resend
+      - target.webhooks.admin.delete
+      - target.products.read
+      - target.products.write
+    default_scopes: [target.webhooks.read]
 ```
 
 `allowed_scopes` is the registry of concrete permissions that can be issued.

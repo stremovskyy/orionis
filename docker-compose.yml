@@ -4,7 +4,7 @@ services:
       context: .
       args:
         TARGET: ./cmd/orionis-auth
-    command: ["-config", "/app/config/orionis.example.json"]
+    command: ["-config", "/app/config/orionis.example.yaml"]
     ports:
       - "8080:8080"
     volumes:

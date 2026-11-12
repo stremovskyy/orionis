@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.26.10-alpine AS builder
+FROM golang:1.26.11-alpine AS builder
 
 WORKDIR /src
 
@@ -33,4 +33,3 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
 	CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1
 
 ENTRYPOINT ["/usr/local/bin/orionis"]
-CMD ["-config", "/app/config/orionis.json"]

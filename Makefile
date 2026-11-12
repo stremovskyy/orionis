@@ -5,7 +5,7 @@ JAVAC ?= javac
 JAVA ?= java
 PHP ?= php
 GO_TOOLCHAIN ?= $(shell awk '/^go / { version = "go" $$2 } /^toolchain / { version = $$2 } END { print version }' go.mod)
-FORMAT_TOOLCHAIN ?= go1.26.10
+FORMAT_TOOLCHAIN ?= go1.26.11
 TOOLS_BIN ?= $(CURDIR)/.tools/bin
 
 tools:
@@ -38,7 +38,7 @@ verify-docker:
 	PATH="$(TOOLS_BIN):$$PATH" scripts/verify-docker.sh
 
 run-auth:
-	go run ./cmd/orionis-auth -config ./config/orionis.example.json
+	go run ./cmd/orionis-auth -config ./config/orionis.example.yaml
 
 run-billing:
 	go run ./examples/gin-billing-service

@@ -50,8 +50,8 @@ func run(parent context.Context, args []string) error {
 	flags := flag.NewFlagSet("orionis-auth", flag.ContinueOnError)
 	cfgPath := flags.String(
 		"config",
-		getenv("ORIONIS_CONFIG", "config/orionis.example.json"),
-		"Path to Orionis config (JSON/YAML detected automatically), or aws for AWS AppConfig",
+		"",
+		"Path to Orionis config (YAML or JSON), or aws for AWS AppConfig; defaults to ORIONIS_CONFIG or an auto-detected local file",
 	)
 
 	if err := flags.Parse(args); err != nil {
@@ -62,7 +62,19 @@ func run(parent context.Context, args []string) error {
 		return err
 	}
 
-	cfg, err := authapp.LoadConfigContext(parent, *cfgPath)
+	configFlagSet := false
+	flags.Visit(func(option *flag.Flag) {
+		if option.Name == "config" {
+			configFlagSet = true
+		}
+	})
+
+	source, err := selectConfigSource(*cfgPath, configFlagSet, os.Getenv("ORIONIS_CONFIG"), ".")
+	if err != nil {
+		return err
+	}
+
+	cfg, err := authapp.LoadConfigContext(parent, source)
 	if err != nil {
 		return err
 	}
@@ -74,7 +86,7 @@ func run(parent context.Context, args []string) error {
 
 	runtime, err := authapp.New(cfg)
 	if err != nil {
-		if strings.EqualFold(strings.TrimSpace(*cfgPath), "aws") {
+		if strings.EqualFold(strings.TrimSpace(source), "aws") {
 			return errors.New("initialize auth runtime: AWS AppConfig configuration could not be initialized")
 		}
 
@@ -89,7 +101,7 @@ func run(parent context.Context, args []string) error {
 
 	slog.Info(
 		"orionis auth server started",
-		"config_source", *cfgPath,
+		"config_source", source,
 		"listen", cfg.ListenAddr(),
 		"issuer", cfg.Issuer,
 		"active_kid", runtime.ActiveKID(),
@@ -135,12 +147,4 @@ func newGinEngine(level slog.Level) *gin.Engine {
 
 func parseLogLevel(logLevel string) (slog.Level, error) {
 	return authapp.ParseLogLevel(logLevel)
-}
-
-func getenv(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-
-	return fallback
 }
